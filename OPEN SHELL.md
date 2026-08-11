@@ -245,33 +245,40 @@ If inference routing is unavailable, pass only the required provider key to
 the sandbox using the gateway's secret/credential mechanism. Never copy
 `~/.pi/agent/auth.json` into the image or upload it to the sandbox.
 
-### TODO: Codex OAuth provider
+### Codex OAuth provider
 
-The first experiment was attempted with:
+`bin/pi-openshell` synchronizes Pi's `openai-codex` OAuth credential with an
+OpenShell provider named `codex` before creating the sandbox. It uses the
+built-in OpenShell `codex` profile and passes credential *names* to the CLI;
+the values are supplied only in the short-lived provider-sync process through
+environment lookup. The values are not command-line arguments, sandbox
+environment variables, or files uploaded to the sandbox.
+
+Log in on the host first, then run the wrapper normally:
 
 ```bash
-openshell provider create \
-  --name codex \
-  --type codex \
-  --from-existing
+pi
 ```
 
-OpenShell returned `no existing local credentials/config found for provider
-type 'codex'`. No provider was created (`openshell provider list` reports no
-providers). Pi's OpenAI Codex OAuth credentials are stored in
-`~/.pi/agent/auth.json`, which OpenShell does not currently recognize as an
-existing Codex provider configuration. Investigate a custom provider or
-inference route before attempting to automate Codex OAuth for ephemeral
-sandboxes. Interactive login is not a suitable daily workflow because OAuth
-browser callbacks cannot reliably reach an isolated sandbox and its
-credentials disappear when the sandbox is deleted.
+The wrapper creates or updates the workspace-scoped provider and attaches it
+with `--provider codex`. It extracts the Codex account ID from the OAuth JWT,
+which is required by the OpenShell profile. If the provider already exists,
+its credentials are refreshed on each invocation. The gateway stores the
+provider; deleting the ephemeral sandbox does not delete the provider.
 
-The preferred design is a custom provider that stores the Codex credential at
-the gateway, attaches it to each sandbox without exposing the host
-`~/.pi/agent/auth.json`, and presents it in the format pi expects. The wrapper
-will then need to attach that provider automatically with `--provider`. An
-API-key provider is simpler, but does not necessarily replace OpenAI Codex
-subscription OAuth.
+To use a different provider name, set both variables:
+
+```bash
+export PI_OPENSHELL_CODEX_PROVIDER=my-codex
+export PI_OPENSHELL_PROVIDER=my-codex
+```
+
+Set `PI_OPENSHELL_PROVIDER=none` to disable automatic synchronization and
+attachment. `PI_CREDENTIALS_PATH` can point to a different Pi auth file. Do
+not set `CODEX_AUTH_*` manually in the sandbox, and do not use `--env` for
+these credentials. The provider still grants the sandbox network access to
+OpenAI endpoints, so keep the gateway policy restricted and use a trusted
+local gateway.
 
 ## Build warnings
 

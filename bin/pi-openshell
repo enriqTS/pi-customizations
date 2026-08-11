@@ -19,6 +19,22 @@ if ! command -v openshell >/dev/null 2>&1; then
   exit 127
 fi
 
+# Attach gateway-owned providers without copying Pi's auth.json into the
+# sandbox. Set PI_OPENSHELL_PROVIDER=none to disable this behavior.
+openshell_provider="${PI_OPENSHELL_PROVIDER:-}"
+if [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
+  if [[ -z "$openshell_provider" ]]; then
+    openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-codex}"
+  fi
+  provider_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-provider"
+  if [[ ! -x "$provider_helper" ]]; then
+    printf 'pi-openshell: provider helper is not executable: %s\n' "$provider_helper" >&2
+    exit 1
+  fi
+  printf 'pi-openshell: synchronizing OpenShell provider %s\n' "$openshell_provider" >&2
+  PI_OPENSHELL_CODEX_PROVIDER="$openshell_provider" "$provider_helper"
+fi
+
 # OpenShell names must be stable enough for logs but unique per invocation.
 project_name="$(basename -- "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cs '[:lower:][:digit:]' '-' | sed 's/^-*//; s/-*$//')"
 project_name="${project_name:-workspace}"
@@ -50,9 +66,14 @@ printf 'pi-openshell: uploading %s to sandbox %s\n' "$PWD" "$sandbox_name" >&2
 # current workspace is uploaded to the resulting sandbox. Keep this command in
 # the foreground so OpenShell can connect its PTY to the user's terminal.
 sandbox_created=1
-openshell sandbox create \
-  --name "$sandbox_name" \
-  --from "$CUSTOMIZATIONS_DIR" \
-  --upload "$PWD:/workspace" \
-  --tty \
-  -- pi "$@"
+sandbox_args=(
+  --name "$sandbox_name"
+  --from "$CUSTOMIZATIONS_DIR"
+  --upload "$PWD:/workspace"
+  --tty
+)
+if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
+  sandbox_args+=(--provider "$openshell_provider")
+fi
+
+openshell sandbox create "${sandbox_args[@]}" -- pi "$@"
