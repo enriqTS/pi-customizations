@@ -1,3 +1,6 @@
+# Pin Terraform separately while letting Docker update the Debian base image.
+FROM hashicorp/terraform:1.11.4 AS terraform
+
 # Debian 13 (trixie) is the current stable Debian release. Keep the Node
 # major explicit while allowing Docker to receive rebuilt security updates.
 FROM node:24-trixie-slim
@@ -16,9 +19,13 @@ RUN apt-get update \
     python3 \
     python3-venv \
     ripgrep \
+    ruff \
     rustc \
+    rustfmt \
     uv \
   && rm -rf /var/lib/apt/lists/*
+
+COPY --from=terraform /bin/terraform /usr/local/bin/terraform
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
   && corepack enable \

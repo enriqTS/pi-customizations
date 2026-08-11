@@ -1,4 +1,5 @@
 - Use the `subagent` tool with the `scout` agent for straightforward repository searches, codebase reconnaissance, and concise read-only investigation when delegation will keep the main context focused.
+- Never run `terraform apply`; it is blocked in this sandbox. Use `terraform fmt`, `terraform validate`, or `terraform plan` instead.
 - For every repository task, use root-level `MEMORY.md` and `PLAN.md` as the durable source of truth. Read the two files at the start when they exist, and create missing files when beginning substantive work.
   - `MEMORY.md`: Record durable decisions, constraints, conventions, and non-obvious discoveries that future agents will need. Keep it curated; never store secrets or transient conversation details.
   - `PLAN.md`: Keep the current objective, approach, progress, and handoff state. Update it whenever the plan or task state changes, and remove stale details.

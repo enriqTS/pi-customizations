@@ -38,8 +38,11 @@ updates. The image contains:
 - `APPEND_SYSTEM.md`
 - subagent definitions from `agents/`
 
-It also includes Node/npm/Corepack, Python with `uv`, Rust/Cargo, and native
-build prerequisites for common project workflows. It intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
+It also includes Node/npm/Corepack, Python with `uv` and `ruff`, Rust/Cargo
+with `rustfmt`, Terraform 1.11.4, and native build prerequisites for common
+project workflows. A baked extension blocks Pi Bash-tool invocations of
+`terraform apply`; use `terraform fmt`, `validate`, or `plan` instead. It
+intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
 keys, or any other host files.
 
 ## Start a local gateway

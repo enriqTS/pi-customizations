@@ -1,11 +1,10 @@
 # Plan
 
-Objective: support common Node, Python/uv, and Rust project workflows in the isolated OpenShell image while allowing sandbox internet access.
+Objective: add Rust formatting, Python linting, and Terraform validation/formatting support while preventing Pi from running Terraform applies.
 
 Approach:
-- Keep the Debian Node image; install language toolchains and build prerequisites rather than switching to a broad, unmaintained development image.
-- Remove the restrictive sandbox network allowlist while preserving filesystem isolation.
-- Direct tool caches to writable `/tmp` locations under the existing filesystem policy.
-- Update documentation and durable notes, review the focused diff, then commit.
+- Install Debian `rustfmt` and `ruff`; copy a pinned official Terraform binary into the image.
+- Add a baked Pi extension that blocks Bash tool commands invoking `terraform apply`, plus a system instruction.
+- Add focused unit coverage for the command detector, update documentation and durable notes, review, test, and commit.
 
-Status: complete; the focused changes were reviewed and tested with the repository test suite.
+Status: complete; command-detector coverage and the repository test suite pass, and the focused changes were reviewed.
