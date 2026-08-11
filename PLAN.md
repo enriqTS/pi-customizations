@@ -1,9 +1,11 @@
 # Plan
 
-Objective: ensure Pi's Docker image provides `fd` locally, avoiding startup downloads.
+Objective: support common Node, Python/uv, and Rust project workflows in the isolated OpenShell image while allowing sandbox internet access.
 
 Approach:
-- Install Debian's `fd-find` package; Pi recognizes its `fdfind` executable.
-- Review the focused diff and commit it.
+- Keep the Debian Node image; install language toolchains and build prerequisites rather than switching to a broad, unmaintained development image.
+- Remove the restrictive sandbox network allowlist while preserving filesystem isolation.
+- Direct tool caches to writable `/tmp` locations under the existing filesystem policy.
+- Update documentation and durable notes, review the focused diff, then commit.
 
-Status: complete; the Dockerfile change was reviewed and is ready to rebuild.
+Status: complete; the focused changes were reviewed and tested with the repository test suite.

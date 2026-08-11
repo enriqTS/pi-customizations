@@ -5,14 +5,23 @@ FROM node:24-trixie-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     bash \
+    build-essential \
     ca-certificates \
+    cargo \
     fd-find \
     git \
     iproute2 \
+    libssl-dev \
+    pkg-config \
+    python3 \
+    python3-venv \
     ripgrep \
+    rustc \
+    uv \
   && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
+  && corepack enable \
   && useradd --create-home --shell /bin/bash pi
 
 # Customizations are copied into the image at build time. The host repository is
@@ -34,8 +43,15 @@ RUN mkdir -p /home/pi/.pi/agent \
   && mkdir -p /workspace \
   && chown pi:pi /workspace
 
+# The policy permits writes only to the workspace, /tmp, and Pi's agent state.
+# Keep language-package caches in /tmp so installs work without widening it.
 ENV HOME=/home/pi \
-  PI_CODING_AGENT_DIR=/home/pi/.pi/agent
+  PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+  CARGO_HOME=/tmp/cargo \
+  COREPACK_HOME=/tmp/corepack \
+  npm_config_cache=/tmp/npm-cache \
+  UV_CACHE_DIR=/tmp/uv-cache \
+  PATH=/tmp/cargo/bin:${PATH}
 WORKDIR /workspace
 USER pi
 ENTRYPOINT ["/usr/local/bin/pi-openshell-entrypoint"]

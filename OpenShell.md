@@ -38,7 +38,8 @@ updates. The image contains:
 - `APPEND_SYSTEM.md`
 - subagent definitions from `agents/`
 
-It intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
+It also includes Node/npm/Corepack, Python with `uv`, Rust/Cargo, and native
+build prerequisites for common project workflows. It intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
 keys, or any other host files.
 
 ## Start a local gateway
@@ -236,14 +237,15 @@ working tree:
 This supports `git status`, branches, local commits, tags, and reflogs. The
 host's resolved `user.name` and `user.email` are passed as non-secret author
 and committer environment variables, but global Git configuration, signing
-keys, SSH keys, and credential helpers are not transferred.
+keys, SSH keys, and credential helpers are not transferred. The sandbox has
+outbound internet access, so public Git remotes and package registries can be
+contacted; credential-bearing remote URLs remain rejected before upload.
 
 Before uploading metadata, `bin/pi-openshell-git-check` rejects linked
 worktrees, external object alternates, symlinks within `.git`, local credential
 helpers, auth headers, proxy/SSH commands, includes, URL rewrites, executable
 remote helpers, and credential-bearing remote URLs. Plain remote URLs remain
-in Git metadata, but the sandbox policy permits only the required OpenAI
-endpoints, so Git remotes cannot be contacted.
+in Git metadata and can be contacted from the sandbox.
 
 Linked worktrees and repositories whose Git directory is outside the
 repository root are intentionally unsupported. Avoid editing the host checkout
@@ -318,11 +320,11 @@ adapter because Pi normally expects a decodable JWT: it uses OpenShell's opaque
 account-ID handle and prevents Pi from trying to refresh an opaque token. The
 host auth file is never uploaded or mounted.
 
-The explicit sandbox policy repeats the OpenAI endpoints and, critically, the
-`node` and `pi` binary paths. OpenShell requires the requesting executable as
-well as the destination to match. It can also take about one second after
-startup to resolve those binary identities, so the entrypoint waits before
-starting Pi.
+The `pi-codex` provider profile grants Pi and Node access to the OpenAI
+endpoints needed for credential substitution. It can take about one second
+after startup to resolve those binary identities, so the entrypoint waits
+before starting Pi. The sandbox policy itself intentionally has no network
+allowlist, permitting normal outbound access for development tooling.
 
 Log in on the host first, then run the wrapper normally:
 
@@ -348,9 +350,8 @@ Set `PI_OPENSHELL_PROVIDER=none` to disable automatic synchronization and
 attachment. `PI_CREDENTIALS_PATH` can point to a different Pi auth file. Do
 not set `CODEX_AUTH_*` manually in the sandbox, and do not use `--env` for
 these credentials. Rebuild the image after changing this entrypoint. The
-provider still grants the sandbox network access to
-OpenAI endpoints, so keep the gateway policy restricted and use a trusted
-local gateway.
+provider makes credential handles usable only for its matching OpenAI endpoints;
+keep the gateway trusted.
 
 ## Build warnings
 
@@ -366,7 +367,8 @@ to receive updated security patches.
 - Use an image containing only the tools and customizations required.
 - Upload or mount only the current workspace at `/workspace`.
 - Configure OpenShell filesystem policy to allow writes only under `/workspace`.
-- Restrict network access to model inference and required package registries.
+- The sandbox intentionally permits outbound internet access; never upload
+  secrets or unreviewed sensitive files with the workspace.
 - Do not mount host home directories, `~/.pi/agent`, or SSH credentials.
 - Review the downloaded diff before copying it back over the original checkout.
 
