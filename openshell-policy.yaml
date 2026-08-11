@@ -16,5 +16,30 @@ filesystem_policy:
     - /home/pi/.pi/agent
 landlock:
   compatibility: best_effort
-# No network policy is deliberately specified: outbound access is unrestricted.
-# Filesystem isolation above remains in effect.
+network_policies:
+  allow_openai_codex:
+    name: allow_openai_codex
+    binaries:
+      - path: /usr/local/bin/node
+      - path: /usr/local/bin/pi
+    endpoints:
+      - host: auth.openai.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+      - host: api.openai.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+      - host: chatgpt.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+      - host: ab.chatgpt.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce

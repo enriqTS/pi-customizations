@@ -1,9 +1,10 @@
 # Plan
 
-Objective: fix the Docker build failure caused by unavailable Debian `ruff` and `uv` packages.
+Objective: fix repeated `fetch failed` errors after the OpenShell network-policy change.
 
 Approach:
-- Source uv and Ruff from their official container images instead of APT.
-- Build the image, review the focused diff, and commit it.
+- Recover the prior network-policy fix that an older sandbox snapshot overwrote on exit.
+- Reproduce the actual Codex request path and inspect gateway diagnostics.
+- Apply and validate any additional fix, then commit from a clean host checkout.
 
-Status: complete; the image builds successfully and uv, uvx, and Ruff execute in the final image.
+Status: complete; the recovered policy passed an actual Codex request (`network-ok`) after a fresh image build and sandbox lifecycle.
