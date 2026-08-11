@@ -258,7 +258,8 @@ instead of the resources baked into `/home/pi/.pi/agent`. Pi's supported agent
 directory override is `PI_CODING_AGENT_DIR` (not `PI_AGENT_DIR`). The wrapper
 therefore executes with both `HOME=/home/pi` and
 `PI_CODING_AGENT_DIR=/home/pi/.pi/agent`; the filesystem policy grants access
-only to that Pi profile directory, not the rest of the home directory.
+to that Pi profile directory and read-only access to the baked customization
+tree, but not to the rest of the home directory.
 
 Before creating the sandbox, `bin/pi-openshell-settings.mjs` builds a temporary
 `settings.json` using an explicit allowlist of non-executable UI, model,
@@ -281,9 +282,12 @@ unknown future settings, and provider configuration. It never transfers:
 - settings values that embed secrets, execute commands, or reference host paths
 
 The entrypoint writes only OpenShell's injected opaque Codex handles to an
-ephemeral `auth.json` under `PI_CODING_AGENT_DIR`. This preserves the existing
-`pi-codex` provider flow, binary policy, startup ordering, and Git synchronization
-without exposing the host Pi profile.
+ephemeral `auth.json` under `PI_CODING_AGENT_DIR`. The wrapper also forwards a
+host `COLORTERM` value only when it is the standard `truecolor` or `24bit`
+capability; otherwise OpenShell's PTY makes Pi fall back to coarse 256-color
+theme approximations. Terminal-specific image protocol variables remain
+isolated. This preserves the existing `pi-codex` provider flow, binary policy,
+startup ordering, and Git synchronization without exposing the host Pi profile.
 
 ## Credentials and inference routing
 

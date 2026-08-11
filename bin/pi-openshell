@@ -215,6 +215,14 @@ exec_args=(
   --env "PI_OPENSHELL_SANITIZED_SETTINGS=/tmp/pi-openshell-settings.json"
   --tty
 )
+# OpenShell's PTY does not preserve COLORTERM. Forward only the standard
+# true-color capability values so Pi does not degrade themes to strong 256-color
+# approximations. Terminal-specific image-protocol variables stay isolated.
+host_colorterm="${COLORTERM:-}"
+case "${host_colorterm,,}" in
+  truecolor|24bit) exec_args+=(--env "COLORTERM=${host_colorterm,,}") ;;
+esac
+
 # Git identity is non-secret and is scoped to this command. Host credential
 # helpers, signing keys, and global Git configuration are never transferred.
 if [[ -n "$git_name" ]]; then
