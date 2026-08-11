@@ -137,11 +137,22 @@ before the normal pi installation on your `PATH`:
 mkdir -p "$HOME/.local/bin"
 ln -sf "$HOME/Projetos/pi-customizations/bin/pi-openshell" \
   "$HOME/.local/bin/pi"
+```
+
+For **fish**, add the directory to your path with:
+
+```fish
+fish_add_path "$HOME/.local/bin"
+```
+
+For **bash** or **zsh**, add this to your shell profile (`~/.bashrc`,
+`~/.zshrc`, etc.):
+
+```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Add the `export PATH` line to your shell profile (`~/.bashrc`, `~/.zshrc`,
-etc.) to make it permanent. Confirm the wrapper is selected:
+Open a new shell if necessary, then confirm the wrapper is selected:
 
 ```bash
 command -v pi
