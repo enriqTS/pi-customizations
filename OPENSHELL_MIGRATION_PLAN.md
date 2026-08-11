@@ -126,6 +126,27 @@ Record compatibility in both repositories, for example:
 pi-customizations release X requires openshell-environments release Y
 ```
 
+### Post-migration image lifecycle decision
+
+After the ownership migration, stop passing a source directory to
+`openshell sandbox create --from` on every client launch. The dedicated
+repository must build a deliberately tagged OCI image through an explicit
+build command, and launchers must consume a full image reference. Do not
+implicitly rebuild the image whenever Pi starts.
+
+- Rebuild only when the shared base, client image layer, baked client assets,
+  entrypoint, or pinned tool versions change.
+- Prefer immutable version tags or digests for normal use, with an explicit
+  local development tag as an override.
+- Record the source revision and client compatibility version as image labels.
+- Fail with a clear build/pull instruction when the selected image is absent;
+  do not silently fall back to an unrelated community image.
+- Provide artifact inspection and cleanup commands so old local images and
+  build cache can be managed intentionally.
+- Docker Compose may orchestrate the gateway and offer a build command, but it
+  must not run a redundant long-lived Pi container; OpenShell owns sandbox
+  container creation.
+
 ### Phase 5: Cut over safely
 
 1. Run old and new launch paths against disposable test projects.
@@ -169,7 +190,7 @@ For each new client:
 - **Snapshot rollback:** retain explicit warnings and consider adding host baseline/version checks before download.
 - **Session or credential leakage:** transfer only explicitly selected files and validate headers/paths.
 - **Larger maintenance surface:** centralize only genuinely shared code; avoid premature abstractions for hypothetical clients.
-- **Moving-image changes:** use digests or fixed tags where reproducibility matters.
+- **Moving-image changes:** use digests or fixed tags where reproducibility matters; never make per-launch rebuilding the freshness mechanism.
 
 ## Rollback plan
 

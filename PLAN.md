@@ -8,3 +8,5 @@ Approach:
 - Document recovery commands and add lifecycle tests with a fake OpenShell CLI.
 
 Status: complete. The wrapper now excludes ignored sandbox artifacts from downloads, supports `--recover` and `--recover-download`, documents both flows, and has integration coverage. Retained sandbox `pi-dothoard-313599` remains available for the user to recover from `/home/henrique/Projetos/dothoard`.
+
+Deferred: migrate shared OpenShell infrastructure first; only then replace per-launch source builds with explicitly built, versioned OCI artifacts as recorded in `OPENSHELL_MIGRATION_PLAN.md`.
