@@ -1,10 +1,10 @@
 # Plan
 
-Objective: fix repeated `fetch failed` errors after the OpenShell network-policy change.
+Objective: permit general outbound internet access while preserving Codex credential routing.
 
 Approach:
-- Recover the prior network-policy fix that an older sandbox snapshot overwrote on exit.
-- Reproduce the actual Codex request path and inspect gateway diagnostics.
-- Apply and validate any additional fix, then commit from a clean host checkout.
+- Determine OpenShell 0.0.102 policy syntax for broad endpoint and binary authorization.
+- Keep the narrow Codex credential provider rules and add a separate general-egress rule.
+- Validate model access and representative internet access in a fresh sandbox, then commit.
 
-Status: complete; the recovered policy passed an actual Codex request (`network-ok`) after a fresh image build and sandbox lifecycle.
+Status: complete; public HTTP/HTTPS endpoints and Codex model access both pass in OpenShell sandboxes.

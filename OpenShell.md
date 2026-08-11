@@ -246,8 +246,8 @@ Before uploading metadata, `bin/pi-openshell-git-check` rejects linked
 worktrees, external object alternates, symlinks within `.git`, local credential
 helpers, auth headers, proxy/SSH commands, includes, URL rewrites, executable
 remote helpers, and credential-bearing remote URLs. Plain remote URLs remain
-in Git metadata, but the sandbox policy permits only the required OpenAI
-endpoints, so Git remotes cannot be contacted.
+in Git metadata. The sandbox permits general HTTP and HTTPS egress, so public
+Git remotes and package registries can be contacted without host credentials.
 
 Linked worktrees and repositories whose Git directory is outside the
 repository root are intentionally unsupported. Avoid editing the host checkout
@@ -322,12 +322,16 @@ adapter because Pi normally expects a decodable JWT: it uses OpenShell's opaque
 account-ID handle and prevents Pi from trying to refresh an opaque token. The
 host auth file is never uploaded or mounted.
 
-The explicit sandbox policy repeats the OpenAI endpoints and, critically, the
-`node` and `pi` binary paths. OpenShell requires the requesting executable as
-well as the destination to match. It can also take about one second after
-startup to resolve those binary identities, so the entrypoint waits before
-starting Pi. Omitting `network_policies` does not grant unrestricted access;
-the proxy rejects outbound tunnels with HTTP 403.
+The sandbox policy permits all sandbox binaries to contact public addresses
+over HTTP or HTTPS (ports 80 and 443). OpenShell 0.0.102 rejects top-level host
+wildcards, so the hostless rule explicitly lists public IPv4 space (excluding
+private, special-use, and non-unicast ranges) plus IPv6 global unicast. The
+`pi-codex` provider profile separately keeps credential substitution scoped to
+Pi/Node and its OpenAI endpoints. It can take about one second after startup to
+resolve binary identities, so the entrypoint waits before starting Pi.
+Omitting `network_policies` does not grant unrestricted access; the proxy
+rejects outbound tunnels with HTTP 403. OpenShell has no concise all-ports
+syntax, so non-web ports remain blocked.
 
 Log in on the host first, then run the wrapper normally:
 
@@ -371,7 +375,8 @@ to receive updated security patches.
 - Use an image containing only the tools and customizations required.
 - Upload or mount only the current workspace at `/workspace`.
 - Configure OpenShell filesystem policy to allow writes only under `/workspace`.
-- Restrict network access to model inference and explicitly required endpoints.
+- General HTTP/HTTPS egress is intentional; do not upload secrets or unreviewed
+  sensitive files, and add non-web ports only when required.
 - Do not mount host home directories, `~/.pi/agent`, or SSH credentials.
 - Review the downloaded diff before copying it back over the original checkout.
 
