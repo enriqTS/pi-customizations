@@ -222,6 +222,25 @@ If inference routing is unavailable, pass only the required provider key to
 the sandbox using the gateway's secret/credential mechanism. Never copy
 `~/.pi/agent/auth.json` into the image or upload it to the sandbox.
 
+### TODO: Codex OAuth provider
+
+The first experiment was attempted with:
+
+```bash
+openshell provider create \
+  --name codex \
+  --type codex \
+  --from-existing
+```
+
+OpenShell returned `no existing local credentials/config found for provider
+type 'codex'`. No provider was created (`openshell provider list` reports no
+providers). Pi's OpenAI Codex OAuth credentials are stored in
+`~/.pi/agent/auth.json`, which OpenShell does not currently recognize as an
+existing Codex provider configuration. Investigate a custom provider or
+inference route before attempting to automate Codex OAuth for ephemeral
+sandboxes.
+
 ## Build warnings
 
 The `node-domexception` deprecation warning comes from a transitive dependency
