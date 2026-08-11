@@ -128,7 +128,43 @@ Check gateway logs with:
 docker logs -f openshell-gateway
 ```
 
-## Start pi
+## Make `pi` seamless
+
+`bin/pi-openshell` is a host-side wrapper. Install it as `pi` in a directory
+before the normal pi installation on your `PATH`:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+ln -sf "$HOME/Projetos/pi-customizations/bin/pi-openshell" \
+  "$HOME/.local/bin/pi"
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Add the `export PATH` line to your shell profile (`~/.bashrc`, `~/.zshrc`,
+etc.) to make it permanent. Confirm the wrapper is selected:
+
+```bash
+command -v pi
+```
+
+From any project directory, simply run:
+
+```bash
+cd /path/to/project
+pi
+```
+
+The wrapper builds the image from this repository, creates a uniquely named
+sandbox, uploads only the current directory to `/workspace`, and starts pi.
+When pi exits, it downloads `/workspace` back into the original directory and
+deletes the sandbox. The customization repository and host home directory are
+never uploaded.
+
+Because the workspace is transferred rather than bind-mounted, changes made
+inside the sandbox are copied back only when pi exits. Review the resulting
+diff before trusting changes from untrusted work.
+
+## Start pi manually
 
 Create a sandbox from the image:
 
