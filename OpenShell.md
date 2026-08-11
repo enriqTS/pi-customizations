@@ -39,7 +39,7 @@ updates. The image contains:
 - subagent definitions from `agents/`
 
 It also includes Node/npm/Corepack, Python with `uv` and `ruff`, Rust/Cargo
-with `rustfmt`, Terraform 1.11.4, and native build prerequisites for common
+with `rustfmt`, the latest Terraform release, and native build prerequisites for common
 project workflows. A baked extension blocks Pi Bash-tool invocations of
 `terraform apply`; use `terraform fmt`, `validate`, or `plan` instead. It
 intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH

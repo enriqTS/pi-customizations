@@ -1,5 +1,5 @@
-# Pin Terraform separately while letting Docker update the Debian base image.
-FROM hashicorp/terraform:1.11.4 AS terraform
+# Use the current Terraform release until a project requires a fixed version.
+FROM hashicorp/terraform:latest AS terraform
 
 # Debian 13 (trixie) is the current stable Debian release. Keep the Node
 # major explicit while allowing Docker to receive rebuilt security updates.
