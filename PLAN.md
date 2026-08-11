@@ -1,9 +1,10 @@
 # Plan
 
-Objective: make the documented OpenShell image build runnable from this repository rather than a hard-coded parent directory.
+Objective: stop previously tracked `.pi` files from being versioned now that `.pi` is ignored.
 
-Completed:
-- Updated `OpenShell.md` to build from this repository using `.` as the Docker context.
-- Removed the `~/Projetos` checkout assumption from the image-build instructions.
+Approach:
+- Preserve the existing `.gitignore` rule.
+- Remove `.pi` from Git’s index without deleting local files.
+- Review the diff and commit the focused cleanup.
 
-Status: complete; ready for handoff.
+Status: complete; `.pi` remains locally present but is no longer tracked.
