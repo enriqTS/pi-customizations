@@ -79,17 +79,25 @@ def main():
         if values[key]:
             credentials.extend(("--credential", key))
 
-    base = ["provider", "create", "--name", provider_name, "--type", "codex", *credentials]
-    created = run_openshell(base, env)
-    if created.returncode == 0:
-        return 0
-
-    # A provider is workspace state, so refresh its credentials on subsequent
-    # runs instead of creating a second provider or leaving an expired token.
-    updated = run_openshell(["provider", "update", provider_name, *credentials], env)
-    if updated.returncode != 0:
+    # Avoid treating a normal "already exists" response as an error. A
+    # provider is workspace state, so refresh its credentials on each run.
+    exists = subprocess.run(
+        ["openshell", "provider", "get", provider_name],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+    if exists:
+        result = run_openshell(["provider", "update", provider_name, *credentials], env)
+    else:
+        result = run_openshell(
+            ["provider", "create", "--name", provider_name, "--type", "codex", *credentials],
+            env,
+        )
+    if result.returncode != 0:
         print(f"pi-openshell-provider: could not create or update provider {provider_name!r}", file=sys.stderr)
-        return updated.returncode or 1
+        return result.returncode or 1
     return 0
 
 

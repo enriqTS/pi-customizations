@@ -252,8 +252,9 @@ OpenShell provider named `codex` before creating the sandbox. It uses the
 built-in OpenShell `codex` profile and passes credential *names* to the CLI;
 the values are supplied only in the short-lived provider-sync process through
 environment lookup. OpenShell injects them into the sandbox at runtime, where
-the image entrypoint creates the minimal ephemeral `auth.json` that Pi
-expects. The host auth file is never uploaded or mounted.
+the wrapper invokes the image's credential adapter to create the minimal
+ephemeral `auth.json` that Pi expects. The host auth file is never uploaded or
+mounted.
 
 Log in on the host first, then run the wrapper normally:
 

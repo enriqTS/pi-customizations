@@ -76,4 +76,6 @@ if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
   sandbox_args+=(--provider "$openshell_provider")
 fi
 
-openshell sandbox create "${sandbox_args[@]}" -- pi "$@"
+# OpenShell executes the requested command directly rather than relying on
+# the image ENTRYPOINT, so invoke the credential adapter explicitly.
+openshell sandbox create "${sandbox_args[@]}" -- /usr/local/bin/pi-openshell-entrypoint pi "$@"
