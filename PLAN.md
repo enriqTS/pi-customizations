@@ -1,10 +1,10 @@
 # Plan
 
-Objective: permit general outbound internet access while preserving Codex credential routing.
+Objective: make host Pi sessions for the current project resumable inside its OpenShell sandbox.
 
 Approach:
-- Determine OpenShell 0.0.102 policy syntax for broad endpoint and binary authorization.
-- Keep the narrow Codex credential provider rules and add a separate general-egress rule.
-- Validate model access and representative internet access in a fresh sandbox, then commit.
+- Map the host and sandbox project-specific session directories without exposing the rest of `~/.pi`.
+- Stage relevant sessions into the sandbox and synchronize updated/new sessions back safely on exit.
+- Add tests for path mapping and transfer behavior, document the privacy/concurrency constraints, and commit.
 
-Status: complete; public HTTP/HTTPS endpoints and Codex model access both pass in OpenShell sandboxes.
+Status: complete; a full sandbox round trip resumed the staged project scope and merged both the existing fixture and a new sandbox session back with host cwd headers.

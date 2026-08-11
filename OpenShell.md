@@ -42,8 +42,9 @@ It also includes Node/npm/Corepack, Python with `uv` and `ruff`, Rust/Cargo
 with `rustfmt`, the latest Terraform release, and native build prerequisites for common
 project workflows. A baked extension blocks Pi Bash-tool invocations of
 `terraform apply`; use `terraform fmt`, `validate`, or `plan` instead. It
-intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
-keys, or any other host files.
+intentionally does not contain `~/.pi/agent/auth.json`, SSH keys, or any other
+host files. The wrapper transfers only the current project's Pi sessions at
+runtime; they are not baked into the image.
 
 ## Start a local gateway
 
@@ -277,11 +278,19 @@ already baked directly into the stable agent directory.
 
 The sanitizer deliberately excludes arbitrary resource/package paths, project
 trust, proxies, session paths, shell/editor/npm commands, tracking identifiers,
-unknown future settings, and provider configuration. It never transfers:
+unknown future settings, and provider configuration. Session synchronization is
+a separate, project-scoped step: the wrapper copies only `.jsonl` files whose
+header cwd matches the invocation directory, translates that cwd to the sandbox
+path, and merges sandbox updates back on exit. This makes `/resume` work without
+exposing sessions from other projects. Set `PI_OPENSHELL_SESSION_DIR` to an
+explicit source directory when the host uses a non-default session location.
+Do not run host and sandbox Pi sessions for the same project concurrently.
+
+The wrapper never transfers:
 
 - `auth.json` or raw OAuth/API credentials
 - `models.json` or other provider configuration
-- sessions, conversation history, trust state, logs, caches, or temporary files
+- other projects' sessions, trust state, logs, caches, or temporary files
 - SSH/GPG keys, credential helpers, shell profiles, or host home directories
 - settings values that embed secrets, execute commands, or reference host paths
 

@@ -43,6 +43,7 @@ fi
 # .git directories separately. Linked worktrees and external object stores can
 # reference host paths, so they are deliberately unsupported.
 host_workspace="$(pwd -P)"
+host_workdir="$host_workspace"
 relative_workdir=""
 git_dir=""
 git_name=""
@@ -87,13 +88,38 @@ sandbox_created=0
 tracked_manifest=""
 download_stage=""
 config_stage=""
+session_stage=""
+session_download_stage=""
+host_agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+host_session_name="--${host_workdir#/}--"
+host_session_name="${host_session_name//\//-}"
+host_session_name="${host_session_name//:/-}"
+host_session_dir="${PI_OPENSHELL_SESSION_DIR:-$host_agent_dir/sessions/$host_session_name}"
+sandbox_session_name="--${sandbox_workdir#/}--"
+sandbox_session_name="${sandbox_session_name//\//-}"
+sandbox_session_name="${sandbox_session_name//:/-}"
+sandbox_session_root="/workspace/.pi-openshell-sessions"
+sandbox_session_dir="$sandbox_session_root/$sandbox_session_name"
+session_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-sessions.mjs"
 cleanup() {
   local status=$?
   local sync_failed=0
   trap - EXIT INT TERM
 
   if (( sandbox_created )); then
-    printf '\npi-openshell: downloading workspace changes...\n' >&2
+    printf '\npi-openshell: downloading session changes...\n' >&2
+    session_download_stage="$(mktemp -d)"
+    if ! openshell sandbox download \
+      "$sandbox_name" "$sandbox_session_dir" "$session_download_stage"; then
+      sync_failed=1
+    elif ! node "$session_helper" translate \
+      "$session_download_stage" "$host_session_dir" \
+      "$sandbox_workdir" "$host_workdir" \
+      "$sandbox_session_dir" "$host_session_dir"; then
+      sync_failed=1
+    fi
+
+    printf 'pi-openshell: downloading workspace changes...\n' >&2
     if [[ -n "$git_dir" ]]; then
       download_stage="$(mktemp -d)"
       if ! openshell sandbox download \
@@ -132,6 +158,8 @@ cleanup() {
   [[ -z "$download_stage" ]] || rm -rf -- "$download_stage"
   [[ -z "$tracked_manifest" ]] || rm -f -- "$tracked_manifest"
   [[ -z "$config_stage" ]] || rm -rf -- "$config_stage"
+  [[ -z "$session_stage" ]] || rm -rf -- "$session_stage"
+  [[ -z "$session_download_stage" ]] || rm -rf -- "$session_download_stage"
   exit "$status"
 }
 trap cleanup EXIT
@@ -159,8 +187,18 @@ if [[ ! -f "$settings_helper" ]]; then
   printf 'pi-openshell: settings sanitizer is missing: %s\n' "$settings_helper" >&2
   exit 1
 fi
+if [[ ! -f "$session_helper" ]]; then
+  printf 'pi-openshell: session synchronizer is missing: %s\n' "$session_helper" >&2
+  exit 1
+fi
 config_stage="$(mktemp -d)"
 node "$settings_helper" "$host_settings" "$config_stage/pi-openshell-settings.json"
+session_stage="$(mktemp -d)"
+mkdir -p -- "$session_stage/$sandbox_session_name"
+node "$session_helper" translate \
+  "$host_session_dir" "$session_stage/$sandbox_session_name" \
+  "$host_workdir" "$sandbox_workdir" \
+  "$host_session_dir" "$sandbox_session_dir"
 
 printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
 
@@ -207,11 +245,22 @@ if ! openshell sandbox upload --no-git-ignore \
   exit 1
 fi
 
+printf 'pi-openshell: uploading project sessions\n' >&2
+if ! openshell sandbox upload --no-git-ignore \
+  "$sandbox_name" "$session_stage/$sandbox_session_name" \
+  "$sandbox_session_root"; then
+  sandbox_created=0
+  printf 'pi-openshell: session upload failed; sandbox retained as %s\n' \
+    "$sandbox_name" >&2
+  exit 1
+fi
+
 exec_args=(
   --name "$sandbox_name"
   --workdir "$sandbox_workdir"
   --env "HOME=/home/pi"
   --env "PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
+  --env "PI_CODING_AGENT_SESSION_DIR=$sandbox_session_dir"
   --env "PI_OPENSHELL_SANITIZED_SETTINGS=/tmp/pi-openshell-settings.json"
   --tty
 )
