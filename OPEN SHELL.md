@@ -250,6 +250,43 @@ repository root are intentionally unsupported. Avoid editing the host checkout
 while the sandbox is active because transfer is snapshot-based, not a live
 mount. If download fails, the wrapper leaves the sandbox intact for recovery.
 
+## TODO: Share safe Pi configuration
+
+Pi inside OpenShell currently does not reproduce the host configuration:
+custom agents and prompts are missing, and the selected theme differs from the
+host session. Although the image bakes repository customizations into
+`/home/pi/.pi/agent`, OpenShell command execution may set `HOME` relative to the
+workspace, while the generated image `settings.json` contains only resource
+paths and omits normal host preferences. Investigate the effective `HOME`,
+`PI_AGENT_DIR`, settings discovery, and resource discovery during `sandbox
+exec` before choosing a transfer mechanism.
+
+The implementation should use an explicit allowlist rather than upload the
+whole Pi profile. Safe candidates include reviewed settings and preferences,
+`APPEND_SYSTEM.md`, agents, prompts, skills, themes, and extensions from this
+version-controlled repository. `models.json` and other provider configuration
+must be reviewed separately because Pi permits embedded keys, environment
+references, and executable credential commands.
+
+Never transfer:
+
+- `auth.json` or raw OAuth/API credentials
+- sessions, conversation history, logs, caches, or temporary files
+- SSH/GPG keys, credential helpers, shell profiles, or host home directories
+- settings values that embed secrets or execute commands
+
+Prefer a stable sandbox agent directory such as `/home/pi/.pi/agent`, with
+`PI_AGENT_DIR` set explicitly for Pi and for the Codex credential adapter. If
+host preferences must be synchronized, build a sanitized staging directory and
+upload only its allowlisted files separately from the project and `.git`
+transfers. Preserve the existing opaque `pi-codex` provider flow, binary policy,
+and startup ordering; do not fix configuration discovery by copying
+`auth.json`, changing `HOME` to the project, or broadening network access.
+
+Validation for this TODO should confirm that agents, prompts, skills,
+extensions, the selected theme, and safe settings match the host while OAuth
+inference and Git round-trip behavior continue to work.
+
 ## Credentials and inference routing
 
 Prefer OpenShell inference routing for supported API-key providers so raw API
