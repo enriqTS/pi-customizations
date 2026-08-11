@@ -2,6 +2,8 @@
 
 Personal, version-controlled Pi configuration source.
 
+OpenShell Git smoke test.
+
 ## Layout
 
 - `extensions/` — TypeScript extensions
