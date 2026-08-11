@@ -38,10 +38,11 @@ updates. The image contains:
 - `APPEND_SYSTEM.md`
 - subagent definitions from `agents/`
 
-It also includes Node/npm/Corepack, Python with `uv` and `ruff`, Rust/Cargo
-with `rustfmt`, the latest Terraform release, and native build prerequisites for common
-project workflows. A baked extension blocks Pi Bash-tool invocations of
-`terraform apply`; use `terraform fmt`, `validate`, or `plan` instead. It
+It also includes Node/npm/Corepack, Python with `uv` and `ruff`, the current
+official Rust toolchain with Cargo, Rustfmt, and Clippy, the latest Terraform
+release, and native build prerequisites for common project workflows. A baked
+extension blocks Pi Bash-tool invocations of `terraform apply`; use
+`terraform fmt`, `validate`, or `plan` instead. It
 intentionally does not contain `~/.pi/agent/auth.json`, SSH keys, or any other
 host files. The wrapper transfers only the current project's Pi sessions at
 runtime; they are not baked into the image.

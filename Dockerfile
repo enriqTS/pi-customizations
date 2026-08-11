@@ -2,6 +2,8 @@
 FROM hashicorp/terraform:latest AS terraform
 FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM ghcr.io/astral-sh/ruff:latest AS ruff
+FROM rust:latest AS rust
+RUN rustup component add rustfmt clippy
 
 # Debian 13 (trixie) is the current stable Debian release. Keep the Node
 # major explicit while allowing Docker to receive rebuilt security updates.
@@ -12,7 +14,6 @@ RUN apt-get update \
     bash \
     build-essential \
     ca-certificates \
-    cargo \
     fd-find \
     git \
     iproute2 \
@@ -21,13 +22,13 @@ RUN apt-get update \
     python3 \
     python3-venv \
     ripgrep \
-    rustc \
-    rustfmt \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=terraform /bin/terraform /usr/local/bin/terraform
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=ruff /ruff /usr/local/bin/ruff
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+COPY --from=rust /usr/local/rustup /usr/local/rustup
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
   && corepack enable \
@@ -57,10 +58,11 @@ RUN mkdir -p /home/pi/.pi/agent \
 ENV HOME=/home/pi \
   PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
   CARGO_HOME=/tmp/cargo \
+  RUSTUP_HOME=/usr/local/rustup \
   COREPACK_HOME=/tmp/corepack \
   npm_config_cache=/tmp/npm-cache \
   UV_CACHE_DIR=/tmp/uv-cache \
-  PATH=/tmp/cargo/bin:${PATH}
+  PATH=/usr/local/cargo/bin:/tmp/cargo/bin:${PATH}
 WORKDIR /workspace
 USER pi
 ENTRYPOINT ["/usr/local/bin/pi-openshell-entrypoint"]

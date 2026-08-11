@@ -1,10 +1,10 @@
 # Plan
 
-Objective: make host Pi sessions for the current project resumable inside its OpenShell sandbox.
+Objective: provide Rust >=1.88 with Rustfmt and Clippy in the sandbox image.
 
 Approach:
-- Map the host and sandbox project-specific session directories without exposing the rest of `~/.pi`.
-- Stage relevant sessions into the sandbox and synchronize updated/new sessions back safely on exit.
-- Add tests for path mapping and transfer behavior, document the privacy/concurrency constraints, and commit.
+- Source the current official Rust toolchain instead of Debian's older Rust packages.
+- Keep Cargo caches writable under `/tmp` while using the baked read-only toolchain.
+- Build the image, verify Rust/Cargo/Rustfmt/Clippy versions, run tests, and commit.
 
-Status: complete; a full sandbox round trip resumed the staged project scope and merged both the existing fixture and a new sandbox session back with host cwd headers.
+Status: complete; the image builds with Rust/Cargo 1.97.1, Rustfmt 1.9.0, and Clippy 0.1.97, and all repository tests pass.
