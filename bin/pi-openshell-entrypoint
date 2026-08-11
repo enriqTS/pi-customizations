@@ -9,12 +9,18 @@ if [[ -n "${CODEX_AUTH_ACCESS_TOKEN:-}" && -n "${CODEX_AUTH_REFRESH_TOKEN:-}" ]]
   node -e '
 const fs = require("fs");
 const path = process.env.HOME + "/.pi/agent/auth.json";
+const access = process.env.CODEX_AUTH_ACCESS_TOKEN;
+let expires = 0;
+try {
+  const payload = JSON.parse(Buffer.from(access.split(".")[1], "base64url").toString());
+  if (Number.isFinite(payload.exp)) expires = payload.exp * 1000;
+} catch {}
 const auth = {
   "openai-codex": {
     type: "oauth",
-    access: process.env.CODEX_AUTH_ACCESS_TOKEN,
+    access,
     refresh: process.env.CODEX_AUTH_REFRESH_TOKEN,
-    expires: 0
+    expires
   }
 };
 fs.writeFileSync(path, JSON.stringify(auth, null, 2) + "\n", { mode: 0o600 });
