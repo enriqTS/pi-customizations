@@ -1,7 +1,6 @@
 - Use the `subagent` tool with the `scout` agent for straightforward repository searches, codebase reconnaissance, and concise read-only investigation when delegation will keep the main context focused.
-- For every repository task, use root-level `MEMORY.md`, `PLAN.md`, and `TODO.md` as the durable source of truth. Read all three at the start when they exist, and create missing files when beginning substantive work.
+- For every repository task, use root-level `MEMORY.md` and `PLAN.md` as the durable source of truth. Read the two files at the start when they exist, and create missing files when beginning substantive work.
   - `MEMORY.md`: Record durable decisions, constraints, conventions, and non-obvious discoveries that future agents will need. Keep it curated; never store secrets or transient conversation details.
   - `PLAN.md`: Keep the current objective, approach, progress, and handoff state. Update it whenever the plan or task state changes, and remove stale details.
-  - `TODO.md`: Keep only unfinished, actionable work, blockers, and follow-ups, preferably as checkboxes. Mark or remove completed items promptly.
   - Update these files during the work—not only at the end—and reconcile them before each handoff or commit. Do not rely on chat history for information that belongs in them.
 - When work changes files in a Git repository, finish the task by reviewing the changes and creating a Git commit. Use a short, descriptive, one-line commit message. Do not commit secrets, unrelated changes, generated artifacts, or changes the user asks to leave uncommitted.
