@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Resolve the repository even when this script is installed through a symlink.
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+CUSTOMIZATIONS_DIR="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+
+if [[ -z "${OPENSHELL_GATEWAY:-}" ]]; then
+  export OPENSHELL_GATEWAY=local
+fi
+
+if [[ ! -d "$PWD" ]]; then
+  printf 'pi-openshell: current directory does not exist: %s\n' "$PWD" >&2
+  exit 1
+fi
+
+if ! command -v openshell >/dev/null 2>&1; then
+  printf 'pi-openshell: openshell CLI is not installed or not on PATH\n' >&2
+  exit 127
+fi
+
+# OpenShell names must be stable enough for logs but unique per invocation.
+project_name="$(basename -- "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cs '[:lower:][:digit:]' '-' | sed 's/^-*//; s/-*$//')"
+project_name="${project_name:-workspace}"
+# OpenShell limits sandbox names to 19 characters.
+project_name="${project_name:0:8}"
+sandbox_name="pi-${project_name}-$$"
+
+sandbox_created=0
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+
+  if (( sandbox_created )); then
+    printf '\npi-openshell: downloading workspace changes...\n' >&2
+    if ! openshell sandbox download "$sandbox_name" /workspace "$PWD"; then
+      printf 'pi-openshell: download failed; sandbox retained as %s\n' "$sandbox_name" >&2
+      exit "$status"
+    fi
+    openshell sandbox delete "$sandbox_name" >/dev/null 2>&1 || true
+  fi
+
+  exit "$status"
+}
+trap cleanup EXIT
+
+printf 'pi-openshell: uploading %s to sandbox %s\n' "$PWD" "$sandbox_name" >&2
+
+# The customization directory is used as a local Dockerfile source. Only the
+# current workspace is uploaded to the resulting sandbox. Keep this command in
+# the foreground so OpenShell can connect its PTY to the user's terminal.
+sandbox_created=1
+openshell sandbox create \
+  --name "$sandbox_name" \
+  --from "$CUSTOMIZATIONS_DIR" \
+  --upload "$PWD:/workspace" \
+  --tty \
+  -- pi "$@"

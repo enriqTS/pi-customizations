@@ -1,0 +1,2 @@
+- Use the `subagent` tool with the `scout` agent for straightforward repository searches, codebase reconnaissance, and concise read-only investigation when delegation will keep the main context focused.
+- When work changes files in a Git repository, finish the task by reviewing the changes and creating a Git commit. Use a short, descriptive, one-line commit message. Do not commit secrets, unrelated changes, generated artifacts, or changes the user asks to leave uncommitted.
