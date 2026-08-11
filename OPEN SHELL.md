@@ -239,7 +239,16 @@ providers). Pi's OpenAI Codex OAuth credentials are stored in
 `~/.pi/agent/auth.json`, which OpenShell does not currently recognize as an
 existing Codex provider configuration. Investigate a custom provider or
 inference route before attempting to automate Codex OAuth for ephemeral
-sandboxes.
+sandboxes. Interactive login is not a suitable daily workflow because OAuth
+browser callbacks cannot reliably reach an isolated sandbox and its
+credentials disappear when the sandbox is deleted.
+
+The preferred design is a custom provider that stores the Codex credential at
+the gateway, attaches it to each sandbox without exposing the host
+`~/.pi/agent/auth.json`, and presents it in the format pi expects. The wrapper
+will then need to attach that provider automatically with `--provider`. An
+API-key provider is simpler, but does not necessarily replace OpenAI Codex
+subscription OAuth.
 
 ## Build warnings
 
