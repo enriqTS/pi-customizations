@@ -237,9 +237,14 @@ working tree:
    with `--no-git-ignore`.
 4. It runs Pi with `sandbox exec` from the corresponding repository
    subdirectory.
-5. On exit, it downloads to a staging directory, overlays changed files,
+5. On exit, it removes files matched by the repository's Git ignore rules from
+   the sandbox, downloads to a staging directory, overlays changed files,
    removes tracked files deleted in the sandbox, synchronizes `.git/` exactly,
    and only then deletes the sandbox. Host ignored files remain untouched.
+
+The cleanup keeps large reproducible outputs such as Rust `target/` and
+JavaScript `node_modules/` out of the transfer. Store any ignored artifact that
+must be returned under a non-ignored path before exiting Pi.
 
 This supports `git status`, branches, local commits, tags, and reflogs. The
 host's resolved `user.name` and `user.email` are passed as non-secret author
@@ -256,7 +261,26 @@ Git remotes and package registries can be contacted without host credentials.
 Linked worktrees and repositories whose Git directory is outside the
 repository root are intentionally unsupported. Avoid editing the host checkout
 while the sandbox is active because transfer is snapshot-based, not a live
-mount. If download fails, the wrapper leaves the sandbox intact for recovery.
+mount. If download fails, the wrapper leaves the sandbox intact and prints its
+name. From the same host project directory, retry synchronization without
+starting Pi:
+
+```bash
+pi --recover-download pi-project-12345
+```
+
+To return to the retained Pi session first and synchronize when it exits:
+
+```bash
+pi --recover pi-project-12345
+```
+
+Both modes reuse the original sandbox without uploading the host checkout.
+They verify that the sandbox still exists, preserve it again if synchronization
+fails, and delete it only after session and workspace synchronization succeed.
+Run recovery from the same project and subdirectory used for the original
+launch so host and sandbox paths map correctly. For a wrapper not installed as
+`pi`, invoke `bin/pi-openshell` with the same options.
 
 ## Safe Pi configuration sharing
 

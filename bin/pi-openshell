@@ -9,6 +9,31 @@ if [[ -z "${OPENSHELL_GATEWAY:-}" ]]; then
   export OPENSHELL_GATEWAY=local
 fi
 
+recovery_mode=""
+recovery_sandbox=""
+case "${1:-}" in
+  --recover)
+    recovery_mode="interactive"
+    recovery_sandbox="${2:-}"
+    shift 2 || true
+    ;;
+  --recover-download)
+    recovery_mode="download"
+    recovery_sandbox="${2:-}"
+    shift 2 || true
+    ;;
+esac
+if [[ -n "$recovery_mode" && -z "$recovery_sandbox" ]]; then
+  if [[ "$recovery_mode" == "download" ]]; then
+    recovery_option="--recover-download"
+  else
+    recovery_option="--recover"
+  fi
+  printf 'usage: pi-openshell %s SANDBOX [PI_ARGS...]\n' \
+    "$recovery_option" >&2
+  exit 2
+fi
+
 if [[ ! -d "$PWD" ]]; then
   printf 'pi-openshell: current directory does not exist: %s\n' "$PWD" >&2
   exit 1
@@ -22,7 +47,10 @@ fi
 # Attach gateway-owned providers without copying Pi's auth.json into the
 # sandbox. Set PI_OPENSHELL_PROVIDER=none to disable this behavior.
 openshell_provider="${PI_OPENSHELL_PROVIDER:-}"
-if [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
+if [[ -n "$recovery_mode" ]]; then
+  # The retained sandbox already has its provider and ephemeral credentials.
+  openshell_provider="none"
+elif [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
   if [[ -z "$openshell_provider" ]]; then
     openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-pi-codex}"
   fi
@@ -82,7 +110,7 @@ project_name="$(basename -- "$host_workspace" | tr '[:upper:]' '[:lower:]' | tr 
 project_name="${project_name:-workspace}"
 # OpenShell limits sandbox names to 19 characters.
 project_name="${project_name:0:8}"
-sandbox_name="pi-${project_name}-$$"
+sandbox_name="${recovery_sandbox:-pi-${project_name}-$$}"
 
 sandbox_created=0
 tracked_manifest=""
@@ -104,6 +132,7 @@ session_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-sessions.mjs"
 cleanup() {
   local status=$?
   local sync_failed=0
+  local prune_failed=0
   trap - EXIT INT TERM
 
   if (( sandbox_created )); then
@@ -121,8 +150,20 @@ cleanup() {
 
     printf 'pi-openshell: downloading workspace changes...\n' >&2
     if [[ -n "$git_dir" ]]; then
+      # Mirror the upload filter before downloading. Build outputs and other
+      # ignored files created in the sandbox can be enormous, are reproducible,
+      # and must not overwrite ignored files that already exist on the host.
+      printf 'pi-openshell: removing Git-ignored sandbox artifacts...\n' >&2
+      if ! openshell sandbox exec \
+        --name "$sandbox_name" --workdir "$sandbox_workspace" --no-tty -- \
+        git clean -fdX; then
+        sync_failed=1
+        prune_failed=1
+      fi
       download_stage="$(mktemp -d)"
-      if ! openshell sandbox download \
+      if (( prune_failed )); then
+        :
+      elif ! openshell sandbox download \
         "$sandbox_name" "$sandbox_workspace" "$download_stage"; then
         sync_failed=1
       elif ! rsync -a -- "$download_stage/" "$host_workspace/"; then
@@ -191,68 +232,80 @@ if [[ ! -f "$session_helper" ]]; then
   printf 'pi-openshell: session synchronizer is missing: %s\n' "$session_helper" >&2
   exit 1
 fi
-config_stage="$(mktemp -d)"
-node "$settings_helper" "$host_settings" "$config_stage/pi-openshell-settings.json"
-session_stage="$(mktemp -d)"
-mkdir -p -- "$session_stage/$sandbox_session_name"
-node "$session_helper" translate \
-  "$host_session_dir" "$session_stage/$sandbox_session_name" \
-  "$host_workdir" "$sandbox_workdir" \
-  "$host_session_dir" "$sandbox_session_dir"
-
-printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
-
-# Create an idle sandbox with the normally filtered working tree first. A
-# separate upload can then disable filtering for .git alone; applying
-# --no-git-ignore to sandbox create would also expose every ignored file.
-sandbox_args=(
-  --name "$sandbox_name"
-  --from "$CUSTOMIZATIONS_DIR"
-  --upload "$host_workspace:/workspace"
-  --no-tty
-)
-openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
-sandbox_args+=(--policy "$openshell_policy")
-if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
-  sandbox_args+=(--provider "$openshell_provider")
-fi
-
-if ! openshell sandbox create "${sandbox_args[@]}" -- true; then
-  if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
-    printf 'pi-openshell: creation failed; sandbox retained as %s\n' "$sandbox_name" >&2
+if [[ -n "$recovery_mode" ]]; then
+  if ! openshell sandbox get "$sandbox_name" >/dev/null; then
+    printf 'pi-openshell: retained sandbox not found: %s\n' "$sandbox_name" >&2
+    exit 1
   fi
-  exit 1
-fi
-sandbox_created=1
+  sandbox_created=1
+  printf 'pi-openshell: recovering retained sandbox %s\n' "$sandbox_name" >&2
+  if [[ "$recovery_mode" == "download" ]]; then
+    exit 0
+  fi
+else
+  config_stage="$(mktemp -d)"
+  node "$settings_helper" "$host_settings" "$config_stage/pi-openshell-settings.json"
+  session_stage="$(mktemp -d)"
+  mkdir -p -- "$session_stage/$sandbox_session_name"
+  node "$session_helper" translate \
+    "$host_session_dir" "$session_stage/$sandbox_session_name" \
+    "$host_workdir" "$sandbox_workdir" \
+    "$host_session_dir" "$sandbox_session_dir"
 
-if [[ -n "$git_dir" ]]; then
-  printf 'pi-openshell: uploading Git metadata from %s\n' "$git_dir" >&2
+  printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
+
+  # Create an idle sandbox with the normally filtered working tree first. A
+  # separate upload can then disable filtering for .git alone; applying
+  # --no-git-ignore to sandbox create would also expose every ignored file.
+  sandbox_args=(
+    --name "$sandbox_name"
+    --from "$CUSTOMIZATIONS_DIR"
+    --upload "$host_workspace:/workspace"
+    --no-tty
+  )
+  openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
+  sandbox_args+=(--policy "$openshell_policy")
+  if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
+    sandbox_args+=(--provider "$openshell_provider")
+  fi
+
+  if ! openshell sandbox create "${sandbox_args[@]}" -- true; then
+    if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
+      printf 'pi-openshell: creation failed; sandbox retained as %s\n' "$sandbox_name" >&2
+    fi
+    exit 1
+  fi
+  sandbox_created=1
+
+  if [[ -n "$git_dir" ]]; then
+    printf 'pi-openshell: uploading Git metadata from %s\n' "$git_dir" >&2
+    if ! openshell sandbox upload --no-git-ignore \
+      "$sandbox_name" "$git_dir" "$sandbox_workspace"; then
+      sandbox_created=0
+      printf 'pi-openshell: Git metadata upload failed; sandbox retained as %s\n' \
+        "$sandbox_name" >&2
+      exit 1
+    fi
+  fi
+
+  printf 'pi-openshell: uploading sanitized Pi settings\n' >&2
   if ! openshell sandbox upload --no-git-ignore \
-    "$sandbox_name" "$git_dir" "$sandbox_workspace"; then
+    "$sandbox_name" "$config_stage/pi-openshell-settings.json" /tmp; then
     sandbox_created=0
-    printf 'pi-openshell: Git metadata upload failed; sandbox retained as %s\n' \
+    printf 'pi-openshell: Pi settings upload failed; sandbox retained as %s\n' \
       "$sandbox_name" >&2
     exit 1
   fi
-fi
 
-printf 'pi-openshell: uploading sanitized Pi settings\n' >&2
-if ! openshell sandbox upload --no-git-ignore \
-  "$sandbox_name" "$config_stage/pi-openshell-settings.json" /tmp; then
-  sandbox_created=0
-  printf 'pi-openshell: Pi settings upload failed; sandbox retained as %s\n' \
-    "$sandbox_name" >&2
-  exit 1
-fi
-
-printf 'pi-openshell: uploading project sessions\n' >&2
-if ! openshell sandbox upload --no-git-ignore \
-  "$sandbox_name" "$session_stage/$sandbox_session_name" \
-  "$sandbox_session_root"; then
-  sandbox_created=0
-  printf 'pi-openshell: session upload failed; sandbox retained as %s\n' \
-    "$sandbox_name" >&2
-  exit 1
+  printf 'pi-openshell: uploading project sessions\n' >&2
+  if ! openshell sandbox upload --no-git-ignore \
+    "$sandbox_name" "$session_stage/$sandbox_session_name" \
+    "$sandbox_session_root"; then
+    sandbox_created=0
+    printf 'pi-openshell: session upload failed; sandbox retained as %s\n' \
+      "$sandbox_name" >&2
+    exit 1
+  fi
 fi
 
 exec_args=(
@@ -283,5 +336,11 @@ fi
 
 # OpenShell executes commands directly rather than through the image
 # ENTRYPOINT, so invoke the credential adapter explicitly.
-openshell sandbox exec "${exec_args[@]}" -- \
-  /usr/local/bin/pi-openshell-entrypoint pi "$@"
+if [[ "$recovery_mode" == "interactive" ]]; then
+  # The entrypoint consumed the one-shot settings file on the original launch.
+  # Reuse the initialized Pi profile and credentials already in the sandbox.
+  openshell sandbox exec "${exec_args[@]}" -- pi "$@"
+else
+  openshell sandbox exec "${exec_args[@]}" -- \
+    /usr/local/bin/pi-openshell-entrypoint pi "$@"
+fi
