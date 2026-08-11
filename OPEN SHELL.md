@@ -18,13 +18,20 @@ its build context:
 
 ```bash
 cd ~/Projetos
-docker build \
+docker buildx build \
+  --pull \
+  --load \
   -t pi-customized \
   -f pi-customizations/Dockerfile.openshell \
   pi-customizations
 ```
 
-Rebuild after changing this repository. The image contains:
+`buildx` uses Docker's current BuildKit builder and avoids the legacy-builder
+warning. `--pull` checks for a newer base image, while `--load` imports the
+result into the local Docker image store for OpenShell to use.
+
+Rebuild after changing this repository and periodically for base-image security
+updates. The image contains:
 
 - extensions, skills, prompts, and themes from this repository
 - `APPEND_SYSTEM.md`
@@ -85,6 +92,14 @@ configuration.
 If inference routing is unavailable, pass only the required provider key to
 the sandbox using the gateway's secret/credential mechanism. Never copy
 `~/.pi/agent/auth.json` into the image or upload it to the sandbox.
+
+## Build warnings
+
+The `node-domexception` deprecation warning comes from a transitive dependency
+of the pi package (or one of its dependencies), not from the Debian base image.
+The npm version notice is also informational. The Dockerfile deliberately uses
+an explicit current Node major and Debian stable release; rebuild with `--pull`
+to receive updated security patches.
 
 ## Isolation checklist
 

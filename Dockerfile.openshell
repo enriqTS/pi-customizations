@@ -1,4 +1,6 @@
-FROM node:24-bookworm-slim
+# Debian 13 (trixie) is the current stable Debian release. Keep the Node
+# major explicit while allowing Docker to receive rebuilt security updates.
+FROM node:24-trixie-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
