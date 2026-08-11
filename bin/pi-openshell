@@ -73,6 +73,12 @@ sandbox_args=(
   --tty
 )
 if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
+  # OpenShell 0.0.102 does not compose the codex profile's network entries
+  # into the effective policy, so include the required endpoints explicitly.
+  openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
+  sandbox_args+=(--policy "$openshell_policy")
+fi
+if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
   sandbox_args+=(--provider "$openshell_provider")
 fi
 
