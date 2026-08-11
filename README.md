@@ -18,6 +18,12 @@ The setup links the subagent extension, agent definitions, and workflow prompts 
 - Agent definitions are discovered anew for every `subagent` call.
 - Keep credentials in `~/.pi/agent/auth.json`; never commit them here.
 
+## OpenShell
+
+`Dockerfile.openshell` builds an image with these customizations baked in, and
+[`OPEN SHELL.md`](OPEN%20SHELL.md) documents running it in OpenShell without
+mounting this repository or the host pi profile into the sandbox.
+
 ## Subagents
 
 The included `subagent` extension originates from Pi's bundled example. `scout` uses `openai-codex/gpt-5.6-luna` for repository investigation. Its model and permitted tools are defined in `agents/scout.md`.

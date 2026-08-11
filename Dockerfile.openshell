@@ -1,0 +1,28 @@
+FROM node:24-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    git \
+    ripgrep \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+
+# Customizations are copied into the image at build time. The host repository is
+# not mounted when the sandbox runs.
+COPY . /opt/pi-customizations
+
+RUN mkdir -p /root/.pi/agent \
+  && cp /opt/pi-customizations/APPEND_SYSTEM.md /root/.pi/agent/APPEND_SYSTEM.md \
+  && cp -a /opt/pi-customizations/agents /root/.pi/agent/agents \
+  && printf '%s\n' '{' \
+    '  "extensions": ["/opt/pi-customizations/extensions"],' \
+    '  "skills": ["/opt/pi-customizations/skills"],' \
+    '  "prompts": ["/opt/pi-customizations/prompts"],' \
+    '  "themes": ["/opt/pi-customizations/themes"]' \
+    '}' > /root/.pi/agent/settings.json
+
+WORKDIR /workspace
+ENTRYPOINT ["pi"]
