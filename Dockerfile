@@ -34,7 +34,8 @@ RUN mkdir -p /home/pi/.pi/agent \
   && mkdir -p /workspace \
   && chown pi:pi /workspace
 
-ENV HOME=/home/pi
+ENV HOME=/home/pi \
+  PI_CODING_AGENT_DIR=/home/pi/.pi/agent
 WORKDIR /workspace
 USER pi
 ENTRYPOINT ["/usr/local/bin/pi-openshell-entrypoint"]

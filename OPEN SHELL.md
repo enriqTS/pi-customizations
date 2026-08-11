@@ -250,42 +250,40 @@ repository root are intentionally unsupported. Avoid editing the host checkout
 while the sandbox is active because transfer is snapshot-based, not a live
 mount. If download fails, the wrapper leaves the sandbox intact for recovery.
 
-## TODO: Share safe Pi configuration
+## Safe Pi configuration sharing
 
-Pi inside OpenShell currently does not reproduce the host configuration:
-custom agents and prompts are missing, and the selected theme differs from the
-host session. Although the image bakes repository customizations into
-`/home/pi/.pi/agent`, OpenShell command execution may set `HOME` relative to the
-workspace, while the generated image `settings.json` contains only resource
-paths and omits normal host preferences. Investigate the effective `HOME`,
-`PI_AGENT_DIR`, settings discovery, and resource discovery during `sandbox
-exec` before choosing a transfer mechanism.
+OpenShell sets `HOME=/workspace` for `sandbox exec`, regardless of the image's
+`HOME`. Without an override, Pi consequently searches `/workspace/.pi/agent`
+instead of the resources baked into `/home/pi/.pi/agent`. Pi's supported agent
+directory override is `PI_CODING_AGENT_DIR` (not `PI_AGENT_DIR`). The wrapper
+therefore executes with both `HOME=/home/pi` and
+`PI_CODING_AGENT_DIR=/home/pi/.pi/agent`; the filesystem policy grants access
+only to that Pi profile directory, not the rest of the home directory.
 
-The implementation should use an explicit allowlist rather than upload the
-whole Pi profile. Safe candidates include reviewed settings and preferences,
-`APPEND_SYSTEM.md`, agents, prompts, skills, themes, and extensions from this
-version-controlled repository. `models.json` and other provider configuration
-must be reviewed separately because Pi permits embedded keys, environment
-references, and executable credential commands.
+Before creating the sandbox, `bin/pi-openshell-settings.mjs` builds a temporary
+`settings.json` using an explicit allowlist of non-executable UI, model,
+compaction, retry, terminal, and display preferences. Resource paths are always
+replaced with the reviewed extensions, prompts, skills, and themes baked from
+this repository under `/opt/pi-customizations`. The wrapper uploads this one
+sanitized file separately from the project and `.git` transfers via `/tmp`; the
+entrypoint installs it into the stable agent directory before creating any
+credentials, then removes the staging file. Agents and `APPEND_SYSTEM.md` are
+already baked directly into the stable agent directory.
 
-Never transfer:
+The sanitizer deliberately excludes arbitrary resource/package paths, project
+trust, proxies, session paths, shell/editor/npm commands, tracking identifiers,
+unknown future settings, and provider configuration. It never transfers:
 
 - `auth.json` or raw OAuth/API credentials
-- sessions, conversation history, logs, caches, or temporary files
+- `models.json` or other provider configuration
+- sessions, conversation history, trust state, logs, caches, or temporary files
 - SSH/GPG keys, credential helpers, shell profiles, or host home directories
-- settings values that embed secrets or execute commands
+- settings values that embed secrets, execute commands, or reference host paths
 
-Prefer a stable sandbox agent directory such as `/home/pi/.pi/agent`, with
-`PI_AGENT_DIR` set explicitly for Pi and for the Codex credential adapter. If
-host preferences must be synchronized, build a sanitized staging directory and
-upload only its allowlisted files separately from the project and `.git`
-transfers. Preserve the existing opaque `pi-codex` provider flow, binary policy,
-and startup ordering; do not fix configuration discovery by copying
-`auth.json`, changing `HOME` to the project, or broadening network access.
-
-Validation for this TODO should confirm that agents, prompts, skills,
-extensions, the selected theme, and safe settings match the host while OAuth
-inference and Git round-trip behavior continue to work.
+The entrypoint writes only OpenShell's injected opaque Codex handles to an
+ephemeral `auth.json` under `PI_CODING_AGENT_DIR`. This preserves the existing
+`pi-codex` provider flow, binary policy, startup ordering, and Git synchronization
+without exposing the host Pi profile.
 
 ## Credentials and inference routing
 

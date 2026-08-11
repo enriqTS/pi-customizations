@@ -22,7 +22,9 @@ The setup links the subagent extension, agent definitions, and workflow prompts 
 
 `Dockerfile` builds an image with these customizations baked in, and
 [`OPEN SHELL.md`](OPEN%20SHELL.md) documents running it in OpenShell without
-mounting this repository or the host pi profile into the sandbox.
+mounting this repository or the host Pi profile into the sandbox. The wrapper
+uploads only an allowlisted, sanitized subset of host preferences and explicitly
+uses `/home/pi/.pi/agent` for resource and ephemeral credential discovery.
 
 ## Subagents
 

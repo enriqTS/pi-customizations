@@ -86,6 +86,7 @@ sandbox_name="pi-${project_name}-$$"
 sandbox_created=0
 tracked_manifest=""
 download_stage=""
+config_stage=""
 cleanup() {
   local status=$?
   local sync_failed=0
@@ -130,6 +131,7 @@ cleanup() {
 
   [[ -z "$download_stage" ]] || rm -rf -- "$download_stage"
   [[ -z "$tracked_manifest" ]] || rm -f -- "$tracked_manifest"
+  [[ -z "$config_stage" ]] || rm -rf -- "$config_stage"
   exit "$status"
 }
 trap cleanup EXIT
@@ -143,6 +145,23 @@ if [[ -n "$git_dir" ]]; then
   git -C "$host_workspace" ls-files -z >"$tracked_manifest"
 fi
 
+# Copy only explicitly allowlisted preferences. Resource locations are replaced
+# with paths baked from this reviewed repository; credentials, provider config,
+# trust state, sessions, arbitrary paths, and command-bearing settings are
+# never included.
+settings_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-settings.mjs"
+host_settings="${PI_OPENSHELL_SETTINGS_PATH:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json}"
+if ! command -v node >/dev/null 2>&1; then
+  printf 'pi-openshell: node is required to sanitize Pi settings\n' >&2
+  exit 127
+fi
+if [[ ! -f "$settings_helper" ]]; then
+  printf 'pi-openshell: settings sanitizer is missing: %s\n' "$settings_helper" >&2
+  exit 1
+fi
+config_stage="$(mktemp -d)"
+node "$settings_helper" "$host_settings" "$config_stage/pi-openshell-settings.json"
+
 printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
 
 # Create an idle sandbox with the normally filtered working tree first. A
@@ -154,9 +173,10 @@ sandbox_args=(
   --upload "$host_workspace:/workspace"
   --no-tty
 )
+openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
+sandbox_args+=(--policy "$openshell_policy")
 if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
-  openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
-  sandbox_args+=(--policy "$openshell_policy" --provider "$openshell_provider")
+  sandbox_args+=(--provider "$openshell_provider")
 fi
 
 if ! openshell sandbox create "${sandbox_args[@]}" -- true; then
@@ -178,9 +198,21 @@ if [[ -n "$git_dir" ]]; then
   fi
 fi
 
+printf 'pi-openshell: uploading sanitized Pi settings\n' >&2
+if ! openshell sandbox upload --no-git-ignore \
+  "$sandbox_name" "$config_stage/pi-openshell-settings.json" /tmp; then
+  sandbox_created=0
+  printf 'pi-openshell: Pi settings upload failed; sandbox retained as %s\n' \
+    "$sandbox_name" >&2
+  exit 1
+fi
+
 exec_args=(
   --name "$sandbox_name"
   --workdir "$sandbox_workdir"
+  --env "HOME=/home/pi"
+  --env "PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
+  --env "PI_OPENSHELL_SANITIZED_SETTINGS=/tmp/pi-openshell-settings.json"
   --tty
 )
 # Git identity is non-secret and is scoped to this command. Host credential

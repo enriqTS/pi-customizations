@@ -2,6 +2,9 @@
   "name": "pi-customizations",
   "private": true,
   "description": "Personal Pi extensions, agents, prompts, skills, and themes",
+  "scripts": {
+    "test": "node --test"
+  },
   "pi": {
     "extensions": ["./extensions"],
     "skills": ["./skills"],
