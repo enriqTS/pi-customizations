@@ -47,23 +47,12 @@ trap cleanup EXIT
 printf 'pi-openshell: uploading %s to sandbox %s\n' "$PWD" "$sandbox_name" >&2
 
 # The customization directory is used as a local Dockerfile source. Only the
-# current workspace is uploaded to the resulting sandbox.
+# current workspace is uploaded to the resulting sandbox. Keep this command in
+# the foreground so OpenShell can connect its PTY to the user's terminal.
+sandbox_created=1
 openshell sandbox create \
   --name "$sandbox_name" \
   --from "$CUSTOMIZATIONS_DIR" \
   --upload "$PWD:/workspace" \
-  -- pi "$@" &
-create_pid=$!
-
-# The CLI creates the sandbox before running pi. This lets cleanup download
-# files after pi exits while still cleaning up failed provisioning attempts.
-while kill -0 "$create_pid" 2>/dev/null; do
-  if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
-    sandbox_created=1
-  fi
-  sleep 1
-done
-if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
-  sandbox_created=1
-fi
-wait "$create_pid"
+  --tty \
+  -- pi "$@"
