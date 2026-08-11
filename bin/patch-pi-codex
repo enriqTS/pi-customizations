@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+// Pi derives the ChatGPT account ID from its access JWT. OpenShell deliberately
+// injects opaque credential handles instead of the raw JWT, so use the matching
+// account-ID handle when the provider is attached. The proxy rewrites both
+// handles to their gateway-owned values on the outbound request.
+const fs = require("fs");
+const path = "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js";
+const source = fs.readFileSync(path, "utf8");
+const oldText = "function extractAccountId(token) {\n    try {";
+const newText = "function extractAccountId(token) {\n    if (process.env.CODEX_AUTH_ACCOUNT_ID) return process.env.CODEX_AUTH_ACCOUNT_ID;\n    try {";
+if (!source.includes(oldText)) {
+  throw new Error(`Pi Codex account-ID patch target not found in ${path}`);
+}
+fs.writeFileSync(path, source.replace(oldText, newText));

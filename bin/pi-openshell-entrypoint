@@ -10,7 +10,10 @@ if [[ -n "${CODEX_AUTH_ACCESS_TOKEN:-}" && -n "${CODEX_AUTH_REFRESH_TOKEN:-}" ]]
 const fs = require("fs");
 const path = process.env.HOME + "/.pi/agent/auth.json";
 const access = process.env.CODEX_AUTH_ACCESS_TOKEN;
-let expires = 0;
+// OpenShell injects an opaque credential handle rather than the raw JWT. It
+// cannot be decoded for expiry, and refreshing it inside the sandbox would
+// send the handle in a JSON body. The gateway owns the real credential.
+let expires = Number.MAX_SAFE_INTEGER;
 try {
   const payload = JSON.parse(Buffer.from(access.split(".")[1], "base64url").toString());
   if (Number.isFinite(payload.exp)) expires = payload.exp * 1000;
@@ -27,5 +30,10 @@ fs.writeFileSync(path, JSON.stringify(auth, null, 2) + "\n", { mode: 0o600 });
 '
   chmod 600 "$HOME/.pi/agent/auth.json"
 fi
+
+# The supervisor resolves policy binary identities shortly after container
+# startup. Pi can otherwise make its first OAuth request before node is
+# authorized, producing a transient proxy 403 that looks like a refresh error.
+sleep 1
 
 exec "$@"

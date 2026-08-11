@@ -18,7 +18,8 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
 # not mounted when the sandbox runs.
 COPY . /opt/pi-customizations
 COPY bin/pi-openshell-entrypoint /usr/local/bin/pi-openshell-entrypoint
-RUN chmod 755 /usr/local/bin/pi-openshell-entrypoint
+RUN chmod 755 /usr/local/bin/pi-openshell-entrypoint \
+  && node /opt/pi-customizations/bin/patch-pi-codex
 
 RUN mkdir -p /home/pi/.pi/agent \
   && cp /opt/pi-customizations/APPEND_SYSTEM.md /home/pi/.pi/agent/APPEND_SYSTEM.md \

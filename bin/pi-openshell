@@ -24,7 +24,11 @@ fi
 openshell_provider="${PI_OPENSHELL_PROVIDER:-}"
 if [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
   if [[ -z "$openshell_provider" ]]; then
-    openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-codex}"
+    openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-pi-codex}"
+  fi
+  provider_profile="$CUSTOMIZATIONS_DIR/providers/pi-codex.yaml"
+  if ! openshell provider profile export pi-codex >/dev/null 2>&1; then
+    openshell provider profile import --file "$provider_profile" >/dev/null
   fi
   provider_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-provider"
   if [[ ! -x "$provider_helper" ]]; then
@@ -73,8 +77,6 @@ sandbox_args=(
   --tty
 )
 if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
-  # OpenShell 0.0.102 does not compose the codex profile's network entries
-  # into the effective policy, so include the required endpoints explicitly.
   openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
   sandbox_args+=(--policy "$openshell_policy")
 fi

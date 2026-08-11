@@ -236,25 +236,38 @@ sandbox session is active because the workspace is copied, not live-mounted.
 
 ## Credentials and inference routing
 
-Prefer OpenShell inference routing so raw API keys remain outside the
-sandbox. Configure pi to use the OpenShell-compatible endpoint supplied by
-your gateway (for example `https://inference.local`) according to the gateway
-configuration.
+Prefer OpenShell inference routing for supported API-key providers so raw API
+keys remain outside the sandbox. Configure Pi to use `https://inference.local`
+through a corresponding OpenAI- or Anthropic-compatible custom model.
 
-If inference routing is unavailable, pass only the required provider key to
-the sandbox using the gateway's secret/credential mechanism. Never copy
-`~/.pi/agent/auth.json` into the image or upload it to the sandbox.
+OpenShell 0.0.102 does **not** support the `codex` provider type for cluster
+inference; `openshell inference set --provider codex ...` accepts only OpenAI,
+Anthropic, NVIDIA, DeepInfra, Vertex AI, and Bedrock provider types. ChatGPT
+subscription OAuth therefore uses a sandbox-attached provider instead. Never
+copy the host `~/.pi/agent/auth.json` into the image or upload it.
 
 ### Codex OAuth provider
 
 `bin/pi-openshell` synchronizes Pi's `openai-codex` OAuth credential with an
-OpenShell provider named `codex` before creating the sandbox. It uses the
-built-in OpenShell `codex` profile and passes credential *names* to the CLI;
-the values are supplied only in the short-lived provider-sync process through
-environment lookup. OpenShell injects them into the sandbox at runtime, where
-the wrapper invokes the image's credential adapter to create the minimal
-ephemeral `auth.json` that Pi expects. The host auth file is never uploaded or
-mounted.
+OpenShell provider named `pi-codex`. The repository's custom
+`providers/pi-codex.yaml` profile extends the built-in Codex endpoint set with
+Pi's `node` and `pi` binary paths. OpenShell requires both the destination and
+the requesting binary to match policy; the built-in profile permits only the
+Codex CLI and therefore rejects Pi with HTTP 403.
+
+Credential values are passed to the OpenShell CLI through environment lookup,
+not command-line arguments. OpenShell injects opaque credential handles—not
+the raw OAuth tokens—into the sandbox. The gateway proxy substitutes the real
+values only on matching outbound requests. The image applies a narrow Pi Codex
+adapter because Pi normally expects a decodable JWT: it uses OpenShell's opaque
+account-ID handle and prevents Pi from trying to refresh an opaque token. The
+host auth file is never uploaded or mounted.
+
+The explicit sandbox policy repeats the OpenAI endpoints and, critically, the
+`node` and `pi` binary paths. OpenShell requires the requesting executable as
+well as the destination to match. It can also take about one second after
+startup to resolve those binary identities, so the entrypoint waits before
+starting Pi.
 
 Log in on the host first, then run the wrapper normally:
 
@@ -262,11 +275,12 @@ Log in on the host first, then run the wrapper normally:
 pi
 ```
 
-The wrapper creates or updates the workspace-scoped provider and attaches it
-with `--provider codex`. It extracts the Codex account ID from the OAuth JWT,
-which is required by the OpenShell profile. If the provider already exists,
-its credentials are refreshed on each invocation. The gateway stores the
-provider; deleting the ephemeral sandbox does not delete the provider.
+The wrapper imports the custom profile when absent, creates or updates the
+workspace-scoped provider, and attaches it with `--provider pi-codex`. It
+extracts the Codex account ID from the OAuth JWT. If the profile definition is
+changed later, delete the custom profile and provider before the next run so
+the wrapper can import the new version; OpenShell profile updates require the
+current gateway resource version.
 
 To use a different provider name, set both variables:
 

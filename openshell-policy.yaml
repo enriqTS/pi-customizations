@@ -17,6 +17,9 @@ landlock:
 network_policies:
   allow_openai_codex:
     name: allow_openai_codex
+    binaries:
+      - path: /usr/local/bin/node
+      - path: /usr/local/bin/pi
     endpoints:
       - host: auth.openai.com
         port: 443

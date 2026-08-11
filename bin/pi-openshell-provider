@@ -47,7 +47,8 @@ def run_openshell(args, env):
 
 
 def main():
-    provider_name = os.environ.get("PI_OPENSHELL_CODEX_PROVIDER", "codex")
+    provider_name = os.environ.get("PI_OPENSHELL_CODEX_PROVIDER", "pi-codex")
+    profile_id = os.environ.get("PI_OPENSHELL_CODEX_PROFILE", "pi-codex")
     auth_path = Path(os.environ.get("PI_CREDENTIALS_PATH", Path.home() / ".pi/agent/auth.json"))
     try:
         auth = json.loads(auth_path.read_text())
@@ -92,7 +93,7 @@ def main():
         result = run_openshell(["provider", "update", provider_name, *credentials], env)
     else:
         result = run_openshell(
-            ["provider", "create", "--name", provider_name, "--type", "codex", *credentials],
+            ["provider", "create", "--name", provider_name, "--type", profile_id, *credentials],
             env,
         )
     if result.returncode != 0:
