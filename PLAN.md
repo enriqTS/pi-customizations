@@ -1,10 +1,10 @@
 # Plan
 
-Objective: add the OpenSSH client to the sandbox without permitting outbound SSH.
+Objective: prepare a durable migration plan for extracting reusable OpenShell infrastructure into a dedicated repository.
 
 Approach:
-- Install Debian's `openssh-client` package in the image.
-- Keep the network policy restricted to HTTP/HTTPS ports 80 and 443.
-- Build the image, verify the client, run tests, and commit.
+- Define ownership boundaries between shared OpenShell infrastructure and Pi-specific behavior.
+- Plan phased extraction, dependency versioning, validation, rollback, and future client isolation.
+- Save the deferred implementation plan without changing runtime behavior.
 
-Status: complete; the image builds with OpenSSH client 10.0p2, port 22 remains absent from policy, and all tests pass.
+Status: complete; `OPENSHELL_MIGRATION_PLAN.md` contains the migration and acceptance plan for later execution.
