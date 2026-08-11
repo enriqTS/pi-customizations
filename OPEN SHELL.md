@@ -62,9 +62,10 @@ docker run -d \
   --restart unless-stopped \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
   -p 127.0.0.1:8080:8080 \
-  -v openshell-state:/var/openshell \
+  -v "$HOME/openshell/state:/var/openshell" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$HOME/openshell/supervisor/openshell-sandbox:$HOME/openshell/supervisor/openshell-sandbox:ro" \
+  -e HOME=/var/openshell \
   -e OPENSHELL_DRIVERS=docker \
   -e OPENSHELL_GRPC_ENDPOINT=http://host.openshell.internal:8080 \
   -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$HOME/openshell/supervisor/openshell-sandbox" \
@@ -75,8 +76,12 @@ docker run -d \
 
 The gateway needs the Docker socket to create sandbox containers. The numeric
 `--group-add` value is the socket's host group ID; using the name `docker` is
-not portable because that group may not exist inside the gateway image. It is
-bound to `127.0.0.1`, so this plaintext endpoint is reachable only from this PC.
+not portable because that group may not exist inside the gateway image. The
+bind-mounted state directory is used instead of a Docker named volume because
+the gateway runs as an unprivileged user and must be able to create its SQLite
+database and credential-storage directory. `HOME=/var/openshell` gives the
+container a writable state location. It is bound to `127.0.0.1`, so this
+plaintext endpoint is reachable only from this PC.
 For a security-sensitive or remote setup, use the gateway's mTLS configuration
 instead of disabling TLS.
 
