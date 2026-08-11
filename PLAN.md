@@ -1,10 +1,10 @@
 # Plan
 
-Objective: provide Rust >=1.88 with Rustfmt and Clippy in the sandbox image.
+Objective: add the OpenSSH client to the sandbox without permitting outbound SSH.
 
 Approach:
-- Source the current official Rust toolchain instead of Debian's older Rust packages.
-- Keep Cargo caches writable under `/tmp` while using the baked read-only toolchain.
-- Build the image, verify Rust/Cargo/Rustfmt/Clippy versions, run tests, and commit.
+- Install Debian's `openssh-client` package in the image.
+- Keep the network policy restricted to HTTP/HTTPS ports 80 and 443.
+- Build the image, verify the client, run tests, and commit.
 
-Status: complete; the image builds with Rust/Cargo 1.97.1, Rustfmt 1.9.0, and Clippy 0.1.97, and all repository tests pass.
+Status: complete; the image builds with OpenSSH client 10.0p2, port 22 remains absent from policy, and all tests pass.

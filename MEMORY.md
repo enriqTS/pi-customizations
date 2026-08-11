@@ -2,7 +2,7 @@
 
 - OpenShell isolation is snapshot-based: `bin/pi-openshell` uploads the host repository to `/workspace/<basename>`, runs Pi there, then downloads changes on exit.
 - The sandbox is not a live bind mount. Host VS Code can inspect the checkout before/after Pi, but must not edit it concurrently because download may overwrite host changes.
-- The image contains the reviewed customizations at `/opt/pi-customizations`; it has no SSH server, code-server, or VS Code integration.
+- The image contains the reviewed customizations at `/opt/pi-customizations`; it has the OpenSSH client for test fidelity but no SSH server, host keys, code-server, or VS Code integration. Outbound SSH remains blocked because network policy permits only ports 80/443.
 - The image installs Debian `fd-find`; Pi recognizes its `fdfind` executable and will not attempt a network download at startup.
 - The Debian Node image is intentionally retained as a small general-purpose base and adds Python, the latest Terraform release, and native-build prerequisites. Rust/Cargo/Rustfmt/Clippy come from the official current Rust image because Debian's packages were too old and omitted Clippy; Ruff and uv come from official Astral images. Tool caches use `/tmp` because the OpenShell filesystem policy does not allow writes to the general home directory. Pin tool images when a project requires reproducible versioning.
 - The baked `terraform-guard` extension blocks Pi Bash-tool invocations of `terraform apply`; formatting, validation, and planning remain allowed. It is a guardrail, not a defense against deliberate shell-bypass techniques.

@@ -40,8 +40,10 @@ updates. The image contains:
 
 It also includes Node/npm/Corepack, Python with `uv` and `ruff`, the current
 official Rust toolchain with Cargo, Rustfmt, and Clippy, the latest Terraform
-release, and native build prerequisites for common project workflows. A baked
-extension blocks Pi Bash-tool invocations of `terraform apply`; use
+release, the OpenSSH client, and native build prerequisites for common project
+workflows. The client supports realistic command/error-handling tests, but
+outbound SSH remains blocked because the network policy permits only ports 80
+and 443. A baked extension blocks Pi Bash-tool invocations of `terraform apply`; use
 `terraform fmt`, `validate`, or `plan` instead. It
 intentionally does not contain `~/.pi/agent/auth.json`, SSH keys, or any other
 host files. The wrapper transfers only the current project's Pi sessions at
