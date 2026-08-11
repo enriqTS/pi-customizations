@@ -22,7 +22,7 @@ docker buildx build \
   --pull \
   --load \
   -t pi-customized \
-  -f pi-customizations/Dockerfile.openshell \
+  -f pi-customizations/Dockerfile \
   pi-customizations
 ```
 
@@ -47,53 +47,54 @@ registration only tells the CLI where to connect; it does not start a server.
 For a local Docker driver, run the official gateway container:
 
 ```bash
+H="$HOME"
 mkdir -p \
-  "$HOME/openshell/supervisor" \
-  "$HOME/.local/state/openshell" \
-  "$HOME/.local/share/openshell" \
-  "$HOME/.config/openshell"
+  "$H/openshell/supervisor" \
+  "$H/.local/state/openshell" \
+  "$H/.local/share/openshell" \
+  "$H/.config/openshell"
 
 docker create --name tmp-supervisor \
   ghcr.io/nvidia/openshell/supervisor:latest
 
 docker cp tmp-supervisor:/openshell-sandbox \
-  "$HOME/openshell/supervisor/openshell-sandbox"
+  "$H/openshell/supervisor/openshell-sandbox"
 docker rm tmp-supervisor
-chmod +x "$HOME/openshell/supervisor/openshell-sandbox"
+chmod +x "$H/openshell/supervisor/openshell-sandbox"
 
 # Generate the gateway mTLS certificates and sandbox JWT signing keys.
 docker run --rm \
-  -e HOME=/home/openshell \
-  -v "$HOME/.local/state/openshell:/home/openshell/.local/state/openshell" \
-  -v "$HOME/.config/openshell:/home/openshell/.config/openshell" \
+  -e HOME="$H" \
+  -v "$H/.local/state/openshell:$H/.local/state/openshell" \
+  -v "$H/.config/openshell:$H/.config/openshell" \
   ghcr.io/nvidia/openshell/gateway:latest \
   generate-certs \
-  --output-dir /home/openshell/.local/state/openshell/tls \
+  --output-dir "$H/.local/state/openshell/tls" \
   --server-san host.openshell.internal
 
 docker run -d \
   --name openshell-gateway \
   --restart unless-stopped \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  -p 127.0.0.1:8080:8080 \
-  -v "$HOME/.local/state/openshell:/home/openshell/.local/state/openshell" \
-  -v "$HOME/.local/share/openshell:/home/openshell/.local/share/openshell" \
-  -v "$HOME/.config/openshell:/home/openshell/.config/openshell" \
+  -p 0.0.0.0:8080:8080 \
+  -v "$H/.local/state/openshell:$H/.local/state/openshell" \
+  -v "$H/.local/share/openshell:$H/.local/share/openshell" \
+  -v "$H/.config/openshell:$H/.config/openshell" \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$HOME/openshell/supervisor/openshell-sandbox:$HOME/openshell/supervisor/openshell-sandbox:ro" \
-  -e HOME=/home/openshell \
+  -v "$H/openshell/supervisor/openshell-sandbox:$H/openshell/supervisor/openshell-sandbox:ro" \
+  -e HOME="$H" \
   -e OPENSHELL_DRIVERS=docker \
-  -e OPENSHELL_GRPC_ENDPOINT=https://127.0.0.1:8080 \
-  -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$HOME/openshell/supervisor/openshell-sandbox" \
-  -e OPENSHELL_DB_URL=sqlite:/home/openshell/.local/state/openshell/openshell.db \
-  -e OPENSHELL_LOCAL_TLS_DIR=/home/openshell/.local/state/openshell/tls \
-  -e OPENSHELL_TLS_CERT=/home/openshell/.local/state/openshell/tls/server/tls.crt \
-  -e OPENSHELL_TLS_KEY=/home/openshell/.local/state/openshell/tls/server/tls.key \
-  -e OPENSHELL_TLS_CLIENT_CA=/home/openshell/.local/state/openshell/tls/ca.crt \
+  -e OPENSHELL_GRPC_ENDPOINT=https://host.openshell.internal:8080 \
+  -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$H/openshell/supervisor/openshell-sandbox" \
+  -e OPENSHELL_DB_URL=sqlite:"$H/.local/state/openshell/openshell.db" \
+  -e OPENSHELL_LOCAL_TLS_DIR="$H/.local/state/openshell/tls" \
+  -e OPENSHELL_TLS_CERT="$H/.local/state/openshell/tls/server/tls.crt" \
+  -e OPENSHELL_TLS_KEY="$H/.local/state/openshell/tls/server/tls.key" \
+  -e OPENSHELL_TLS_CLIENT_CA="$H/.local/state/openshell/tls/ca.crt" \
   -e OPENSHELL_ENABLE_MTLS_AUTH=true \
-  -e OPENSHELL_DOCKER_TLS_CA=/home/openshell/.local/state/openshell/tls/ca.crt \
-  -e OPENSHELL_DOCKER_TLS_CERT=/home/openshell/.local/state/openshell/tls/client/tls.crt \
-  -e OPENSHELL_DOCKER_TLS_KEY=/home/openshell/.local/state/openshell/tls/client/tls.key \
+  -e OPENSHELL_DOCKER_TLS_CA="$H/.local/state/openshell/tls/ca.crt" \
+  -e OPENSHELL_DOCKER_TLS_CERT="$H/.local/state/openshell/tls/client/tls.crt" \
+  -e OPENSHELL_DOCKER_TLS_KEY="$H/.local/state/openshell/tls/client/tls.key" \
   ghcr.io/nvidia/openshell/gateway:latest
 ```
 
@@ -103,7 +104,10 @@ not portable because that group may not exist inside the gateway image. The
 state and data directories are bind-mounted because the gateway runs as an
 unprivileged user. The gateway JWT keys are required even when CLI access uses
 mTLS: sandbox containers use gateway-minted JWTs to authenticate back to it.
-The endpoint is bound to `127.0.0.1` and uses mTLS.
+The endpoint is published on the Docker bridge and uses mTLS. The Docker
+sandbox network must reach the gateway callback, so do not bind this port only
+to `127.0.0.1`. Restrict port 8080 with the host firewall if the machine is
+reachable from an untrusted network.
 
 Register and select the TLS gateway:
 
@@ -131,9 +135,14 @@ Create a sandbox from the image:
 ```bash
 openshell sandbox create \
   --name pi-sandbox \
-  --from pi-customized \
+  --from "$HOME/Projetos/pi-customizations" \
   -- pi
 ```
+
+When `--from` receives a directory, OpenShell builds its `Dockerfile` using
+the local Docker daemon. This is preferable to using `pi-customized` as a
+bare name, because bare names are resolved as community images and may be
+pulled from the public registry.
 
 The command above runs the complete pi process inside OpenShell. Use a new
 terminal for file transfer when the selected gateway is remote or when the

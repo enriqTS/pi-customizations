@@ -20,7 +20,7 @@ The setup links the subagent extension, agent definitions, and workflow prompts 
 
 ## OpenShell
 
-`Dockerfile.openshell` builds an image with these customizations baked in, and
+`Dockerfile` builds an image with these customizations baked in, and
 [`OPEN SHELL.md`](OPEN%20SHELL.md) documents running it in OpenShell without
 mounting this repository or the host pi profile into the sandbox.
 
