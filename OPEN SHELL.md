@@ -47,7 +47,11 @@ registration only tells the CLI where to connect; it does not start a server.
 For a local Docker driver, run the official gateway container:
 
 ```bash
-mkdir -p "$HOME/openshell/supervisor"
+mkdir -p \
+  "$HOME/openshell/supervisor" \
+  "$HOME/.local/state/openshell" \
+  "$HOME/.local/share/openshell" \
+  "$HOME/.config/openshell"
 
 docker create --name tmp-supervisor \
   ghcr.io/nvidia/openshell/supervisor:latest
@@ -57,38 +61,55 @@ docker cp tmp-supervisor:/openshell-sandbox \
 docker rm tmp-supervisor
 chmod +x "$HOME/openshell/supervisor/openshell-sandbox"
 
+# Generate the gateway mTLS certificates and sandbox JWT signing keys.
+docker run --rm \
+  -e HOME=/home/openshell \
+  -v "$HOME/.local/state/openshell:/home/openshell/.local/state/openshell" \
+  -v "$HOME/.config/openshell:/home/openshell/.config/openshell" \
+  ghcr.io/nvidia/openshell/gateway:latest \
+  generate-certs \
+  --output-dir /home/openshell/.local/state/openshell/tls \
+  --server-san host.openshell.internal
+
 docker run -d \
   --name openshell-gateway \
   --restart unless-stopped \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
   -p 127.0.0.1:8080:8080 \
-  -v "$HOME/openshell/state:/var/openshell" \
+  -v "$HOME/.local/state/openshell:/home/openshell/.local/state/openshell" \
+  -v "$HOME/.local/share/openshell:/home/openshell/.local/share/openshell" \
+  -v "$HOME/.config/openshell:/home/openshell/.config/openshell" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$HOME/openshell/supervisor/openshell-sandbox:$HOME/openshell/supervisor/openshell-sandbox:ro" \
-  -e HOME=/var/openshell \
+  -e HOME=/home/openshell \
   -e OPENSHELL_DRIVERS=docker \
-  -e OPENSHELL_GRPC_ENDPOINT=http://host.openshell.internal:8080 \
+  -e OPENSHELL_GRPC_ENDPOINT=https://127.0.0.1:8080 \
   -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$HOME/openshell/supervisor/openshell-sandbox" \
-  -e OPENSHELL_DB_URL=sqlite:/var/openshell/openshell.db \
-  -e OPENSHELL_DISABLE_TLS=true \
+  -e OPENSHELL_DB_URL=sqlite:/home/openshell/.local/state/openshell/openshell.db \
+  -e OPENSHELL_LOCAL_TLS_DIR=/home/openshell/.local/state/openshell/tls \
+  -e OPENSHELL_TLS_CERT=/home/openshell/.local/state/openshell/tls/server/tls.crt \
+  -e OPENSHELL_TLS_KEY=/home/openshell/.local/state/openshell/tls/server/tls.key \
+  -e OPENSHELL_TLS_CLIENT_CA=/home/openshell/.local/state/openshell/tls/ca.crt \
+  -e OPENSHELL_ENABLE_MTLS_AUTH=true \
+  -e OPENSHELL_DOCKER_TLS_CA=/home/openshell/.local/state/openshell/tls/ca.crt \
+  -e OPENSHELL_DOCKER_TLS_CERT=/home/openshell/.local/state/openshell/tls/client/tls.crt \
+  -e OPENSHELL_DOCKER_TLS_KEY=/home/openshell/.local/state/openshell/tls/client/tls.key \
   ghcr.io/nvidia/openshell/gateway:latest
 ```
 
 The gateway needs the Docker socket to create sandbox containers. The numeric
 `--group-add` value is the socket's host group ID; using the name `docker` is
 not portable because that group may not exist inside the gateway image. The
-bind-mounted state directory is used instead of a Docker named volume because
-the gateway runs as an unprivileged user and must be able to create its SQLite
-database and credential-storage directory. `HOME=/var/openshell` gives the
-container a writable state location. It is bound to `127.0.0.1`, so this
-plaintext endpoint is reachable only from this PC.
-For a security-sensitive or remote setup, use the gateway's mTLS configuration
-instead of disabling TLS.
+state and data directories are bind-mounted because the gateway runs as an
+unprivileged user. The gateway JWT keys are required even when CLI access uses
+mTLS: sandbox containers use gateway-minted JWTs to authenticate back to it.
+The endpoint is bound to `127.0.0.1` and uses mTLS.
 
-Register and select it:
+Register and select the TLS gateway:
 
 ```bash
-openshell gateway add http://127.0.0.1:8080 --local --name local
+openshell gateway remove local 2>/dev/null || true
+openshell gateway add https://127.0.0.1:8080 --local --name local
 openshell gateway select local
 openshell status
 ```
