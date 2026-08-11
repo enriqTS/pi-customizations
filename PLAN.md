@@ -1,9 +1,9 @@
 # Plan
 
-Objective: use the latest Terraform image for the non-production sandbox until a project-specific version is needed.
+Objective: fix the Docker build failure caused by unavailable Debian `ruff` and `uv` packages.
 
 Approach:
-- Replace the fixed Terraform image tag with `latest`.
-- Update the documentation and durable notes, review, then commit.
+- Source uv and Ruff from their official container images instead of APT.
+- Build the image, review the focused diff, and commit it.
 
-Status: complete; the focused change was reviewed and is ready to rebuild.
+Status: complete; the image builds successfully and uv, uvx, and Ruff execute in the final image.

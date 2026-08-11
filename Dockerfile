@@ -1,5 +1,7 @@
 # Use the current Terraform release until a project requires a fixed version.
 FROM hashicorp/terraform:latest AS terraform
+FROM ghcr.io/astral-sh/uv:latest AS uv
+FROM ghcr.io/astral-sh/ruff:latest AS ruff
 
 # Debian 13 (trixie) is the current stable Debian release. Keep the Node
 # major explicit while allowing Docker to receive rebuilt security updates.
@@ -19,13 +21,13 @@ RUN apt-get update \
     python3 \
     python3-venv \
     ripgrep \
-    ruff \
     rustc \
     rustfmt \
-    uv \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=terraform /bin/terraform /usr/local/bin/terraform
+COPY --from=uv /uv /uvx /usr/local/bin/
+COPY --from=ruff /ruff /usr/local/bin/ruff
 
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
   && corepack enable \
