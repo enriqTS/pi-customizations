@@ -40,16 +40,61 @@ updates. The image contains:
 It intentionally does not contain `~/.pi/agent/auth.json`, host sessions, SSH
 keys, or any other host files.
 
-## Select a gateway
+## Start a local gateway
 
-Every OpenShell sandbox needs an active gateway:
+The Python-installed CLI does not include the gateway daemon. The `local`
+registration only tells the CLI where to connect; it does not start a server.
+For a local Docker driver, run the official gateway container:
 
 ```bash
-openshell gateway add <gateway-url> --name local
-openshell gateway select local
+mkdir -p "$HOME/openshell/supervisor"
+
+docker create --name tmp-supervisor \
+  ghcr.io/nvidia/openshell/supervisor:latest
+
+docker cp tmp-supervisor:/openshell-sandbox \
+  "$HOME/openshell/supervisor/openshell-sandbox"
+docker rm tmp-supervisor
+chmod +x "$HOME/openshell/supervisor/openshell-sandbox"
+
+docker run -d \
+  --name openshell-gateway \
+  --restart unless-stopped \
+  --group-add docker \
+  -p 127.0.0.1:8080:8080 \
+  -v openshell-state:/var/openshell \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$HOME/openshell/supervisor/openshell-sandbox:$HOME/openshell/supervisor/openshell-sandbox:ro" \
+  -e OPENSHELL_DRIVERS=docker \
+  -e OPENSHELL_GRPC_ENDPOINT=http://host.openshell.internal:8080 \
+  -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$HOME/openshell/supervisor/openshell-sandbox" \
+  -e OPENSHELL_DB_URL=sqlite:/var/openshell/openshell.db \
+  -e OPENSHELL_DISABLE_TLS=true \
+  ghcr.io/nvidia/openshell/gateway:latest
 ```
 
-If a gateway has already been configured, only the `select` command is needed.
+The gateway needs the Docker socket to create sandbox containers. It is bound
+to `127.0.0.1`, so this plaintext endpoint is reachable only from this PC.
+For a security-sensitive or remote setup, use the gateway's mTLS configuration
+instead of disabling TLS.
+
+Register and select it:
+
+```bash
+openshell gateway add http://127.0.0.1:8080 --local --name local
+openshell gateway select local
+openshell status
+```
+
+If `local` is already registered, use `openshell gateway remove local` before
+running the `gateway add` command again, or simply select it after the gateway
+is running.
+
+Check gateway logs with:
+
+```bash
+docker logs -f openshell-gateway
+```
 
 ## Start pi
 
