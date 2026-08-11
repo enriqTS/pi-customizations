@@ -1,10 +1,9 @@
 # Plan
 
-Objective: stop previously tracked `.pi` files from being versioned now that `.pi` is ignored.
+Objective: ensure Pi's Docker image provides `fd` locally, avoiding startup downloads.
 
 Approach:
-- Preserve the existing `.gitignore` rule.
-- Remove `.pi` from Git’s index without deleting local files.
-- Review the diff and commit the focused cleanup.
+- Install Debian's `fd-find` package; Pi recognizes its `fdfind` executable.
+- Review the focused diff and commit it.
 
-Status: complete; `.pi` remains locally present but is no longer tracked.
+Status: complete; the Dockerfile change was reviewed and is ready to rebuild.
