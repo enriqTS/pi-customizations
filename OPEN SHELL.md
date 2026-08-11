@@ -211,6 +211,29 @@ For a remote gateway, `/workspace` is sandbox-local. Changes will not appear
 in the host checkout until they are downloaded. Do not upload `~`,
 `~/.pi/agent`, SSH credentials, or parent directories.
 
+## TODO: Preserve local Git history
+
+The current wrapper intentionally follows Git-ignore rules when uploading the
+workspace, so `.git/` is omitted. As a result, pi cannot currently run
+`git status`, switch branches, or create local commits inside the sandbox.
+
+The intended workflow only needs local Git tracking; pushes and pulls will be
+done on the host. Implement this in a future session by:
+
+1. Uploading the working tree with normal Git-ignore filtering.
+2. Uploading only the current repository's `.git/` metadata separately with
+   filtering disabled.
+3. Downloading `/workspace` back after pi exits, including the updated `.git/`
+   metadata.
+4. Ensuring no host SSH keys, Git credential helpers, or remote credentials are
+   transferred.
+5. Restricting sandbox network access so Git remotes cannot be contacted from
+   inside the sandbox.
+
+This will support `git status`, branch changes, local commits, and reflogs
+without granting push/pull access. Avoid editing the host checkout while the
+sandbox session is active because the workspace is copied, not live-mounted.
+
 ## Credentials and inference routing
 
 Prefer OpenShell inference routing so raw API keys remain outside the
