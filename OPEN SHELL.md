@@ -60,7 +60,7 @@ chmod +x "$HOME/openshell/supervisor/openshell-sandbox"
 docker run -d \
   --name openshell-gateway \
   --restart unless-stopped \
-  --group-add docker \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
   -p 127.0.0.1:8080:8080 \
   -v openshell-state:/var/openshell \
   -v /var/run/docker.sock:/var/run/docker.sock \
@@ -73,8 +73,10 @@ docker run -d \
   ghcr.io/nvidia/openshell/gateway:latest
 ```
 
-The gateway needs the Docker socket to create sandbox containers. It is bound
-to `127.0.0.1`, so this plaintext endpoint is reachable only from this PC.
+The gateway needs the Docker socket to create sandbox containers. The numeric
+`--group-add` value is the socket's host group ID; using the name `docker` is
+not portable because that group may not exist inside the gateway image. It is
+bound to `127.0.0.1`, so this plaintext endpoint is reachable only from this PC.
 For a security-sensitive or remote setup, use the gateway's mTLS configuration
 instead of disabling TLS.
 
