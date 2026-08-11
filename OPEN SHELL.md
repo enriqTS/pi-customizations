@@ -8,6 +8,7 @@ customizations. The customization repository is copied into the image; it is
 
 - Docker (to build the image)
 - OpenShell CLI
+- `git` and `rsync` on the host for repository transfer
 - An OpenShell gateway
 - A provider configured for either inference routing or sandbox credentials
 
@@ -166,10 +167,12 @@ pi
 ```
 
 The wrapper builds the image from this repository, creates a uniquely named
-sandbox, uploads only the current directory to `/workspace`, and starts pi.
-When pi exits, it downloads `/workspace` back into the original directory and
-deletes the sandbox. The customization repository and host home directory are
-never uploaded.
+sandbox, and uploads the project or repository root under
+`/workspace/<directory-name>`. Pi starts in the corresponding directory (also
+when invoked from a repository subdirectory). When Pi exits, the wrapper
+downloads that directory back over the original workspace and deletes the
+sandbox. The customization repository and host home directory are never
+uploaded as workspace data.
 
 Because the workspace is transferred rather than bind-mounted, changes made
 inside the sandbox are copied back only when pi exits. Review the resulting
@@ -195,44 +198,57 @@ The command above runs the complete pi process inside OpenShell. Use a new
 terminal for file transfer when the selected gateway is remote or when the
 workspace is not directly mounted by the gateway.
 
-Upload only the current project:
+Upload only the current project. OpenShell preserves the source directory
+basename below the destination:
 
 ```bash
+project_name="$(basename "$PWD")"
 openshell sandbox upload pi-sandbox "$PWD" /workspace
 ```
 
 After the work is complete, download the resulting project:
 
 ```bash
-openshell sandbox download pi-sandbox /workspace ./workspace-from-sandbox
+openshell sandbox download \
+  pi-sandbox "/workspace/$project_name" ./workspace-from-sandbox
 ```
 
 For a remote gateway, `/workspace` is sandbox-local. Changes will not appear
 in the host checkout until they are downloaded. Do not upload `~`,
 `~/.pi/agent`, SSH credentials, or parent directories.
 
-## TODO: Preserve local Git history
+## Local Git history
 
-The current wrapper intentionally follows Git-ignore rules when uploading the
-workspace, so `.git/` is omitted. As a result, pi cannot currently run
-`git status`, switch branches, or create local commits inside the sandbox.
+The wrapper preserves Git history without disabling ignore filtering for the
+working tree:
 
-The intended workflow only needs local Git tracking; pushes and pulls will be
-done on the host. Implement this in a future session by:
+1. It resolves the repository root even when Pi is launched from a subdirectory.
+2. It creates an idle sandbox and uploads the working tree with normal
+   `.gitignore` filtering.
+3. It separately uploads only the ordinary repository-root `.git/` directory
+   with `--no-git-ignore`.
+4. It runs Pi with `sandbox exec` from the corresponding repository
+   subdirectory.
+5. On exit, it downloads to a staging directory, overlays changed files,
+   removes tracked files deleted in the sandbox, synchronizes `.git/` exactly,
+   and only then deletes the sandbox. Host ignored files remain untouched.
 
-1. Uploading the working tree with normal Git-ignore filtering.
-2. Uploading only the current repository's `.git/` metadata separately with
-   filtering disabled.
-3. Downloading `/workspace` back after pi exits, including the updated `.git/`
-   metadata.
-4. Ensuring no host SSH keys, Git credential helpers, or remote credentials are
-   transferred.
-5. Restricting sandbox network access so Git remotes cannot be contacted from
-   inside the sandbox.
+This supports `git status`, branches, local commits, tags, and reflogs. The
+host's resolved `user.name` and `user.email` are passed as non-secret author
+and committer environment variables, but global Git configuration, signing
+keys, SSH keys, and credential helpers are not transferred.
 
-This will support `git status`, branch changes, local commits, and reflogs
-without granting push/pull access. Avoid editing the host checkout while the
-sandbox session is active because the workspace is copied, not live-mounted.
+Before uploading metadata, `bin/pi-openshell-git-check` rejects linked
+worktrees, external object alternates, symlinks within `.git`, local credential
+helpers, auth headers, proxy/SSH commands, includes, URL rewrites, executable
+remote helpers, and credential-bearing remote URLs. Plain remote URLs remain
+in Git metadata, but the sandbox policy permits only the required OpenAI
+endpoints, so Git remotes cannot be contacted.
+
+Linked worktrees and repositories whose Git directory is outside the
+repository root are intentionally unsupported. Avoid editing the host checkout
+while the sandbox is active because transfer is snapshot-based, not a live
+mount. If download fails, the wrapper leaves the sandbox intact for recovery.
 
 ## Credentials and inference routing
 

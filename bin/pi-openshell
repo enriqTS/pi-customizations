@@ -39,51 +39,160 @@ if [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/ag
   PI_OPENSHELL_CODEX_PROVIDER="$openshell_provider" "$provider_helper"
 fi
 
+# Use the repository root as the transferred workspace and preserve ordinary
+# .git directories separately. Linked worktrees and external object stores can
+# reference host paths, so they are deliberately unsupported.
+host_workspace="$(pwd -P)"
+relative_workdir=""
+git_dir=""
+git_name=""
+git_email=""
+if git -C "$host_workspace" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  repo_root="$(git -C "$host_workspace" rev-parse --show-toplevel)"
+  repo_root="$(cd -- "$repo_root" && pwd -P)"
+  case "$host_workspace/" in
+    "$repo_root/"*) ;;
+    *)
+      printf 'pi-openshell: current directory is outside resolved repository root\n' >&2
+      exit 1
+      ;;
+  esac
+  relative_workdir="${host_workspace#"$repo_root"}"
+  host_workspace="$repo_root"
+
+  git_dir="$(git -C "$repo_root" rev-parse --absolute-git-dir)"
+  git_dir="$(readlink -f -- "$git_dir")"
+  if [[ "$git_dir" != "$repo_root/.git" || ! -d "$repo_root/.git" || -L "$repo_root/.git" ]]; then
+    printf 'pi-openshell: only an ordinary repository-root .git directory is supported\n' >&2
+    exit 1
+  fi
+  "$CUSTOMIZATIONS_DIR/bin/pi-openshell-git-check" "$git_dir"
+  git_name="$(git -C "$repo_root" config user.name || true)"
+  git_email="$(git -C "$repo_root" config user.email || true)"
+fi
+
+# OpenShell preserves the source directory basename when uploading. Keep the
+# repository under /workspace and execute from the matching relative path.
+sandbox_workspace="/workspace/$(basename -- "$host_workspace")"
+sandbox_workdir="$sandbox_workspace$relative_workdir"
+
 # OpenShell names must be stable enough for logs but unique per invocation.
-project_name="$(basename -- "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cs '[:lower:][:digit:]' '-' | sed 's/^-*//; s/-*$//')"
+project_name="$(basename -- "$host_workspace" | tr '[:upper:]' '[:lower:]' | tr -cs '[:lower:][:digit:]' '-' | sed 's/^-*//; s/-*$//')"
 project_name="${project_name:-workspace}"
 # OpenShell limits sandbox names to 19 characters.
 project_name="${project_name:0:8}"
 sandbox_name="pi-${project_name}-$$"
 
 sandbox_created=0
+tracked_manifest=""
+download_stage=""
 cleanup() {
   local status=$?
+  local sync_failed=0
   trap - EXIT INT TERM
 
   if (( sandbox_created )); then
     printf '\npi-openshell: downloading workspace changes...\n' >&2
-    if ! openshell sandbox download "$sandbox_name" /workspace "$PWD"; then
-      printf 'pi-openshell: download failed; sandbox retained as %s\n' "$sandbox_name" >&2
-      exit "$status"
+    if [[ -n "$git_dir" ]]; then
+      download_stage="$(mktemp -d)"
+      if ! openshell sandbox download \
+        "$sandbox_name" "$sandbox_workspace" "$download_stage"; then
+        sync_failed=1
+      elif ! rsync -a -- "$download_stage/" "$host_workspace/"; then
+        sync_failed=1
+      elif ! rsync -a --delete -- \
+        "$download_stage/.git/" "$host_workspace/.git/"; then
+        sync_failed=1
+      else
+        # Archive extraction cannot delete host files. Remove only paths that
+        # were tracked before upload and are absent from the sandbox snapshot;
+        # ignored host files were never uploaded and must remain untouched.
+        while IFS= read -r -d '' tracked_path; do
+          if [[ ! -e "$download_stage/$tracked_path" && \
+                ! -L "$download_stage/$tracked_path" ]]; then
+            rm -f -- "$host_workspace/$tracked_path" || sync_failed=1
+          fi
+        done <"$tracked_manifest"
+      fi
+    elif ! openshell sandbox download \
+      "$sandbox_name" "$sandbox_workspace" "$host_workspace"; then
+      sync_failed=1
     fi
-    openshell sandbox delete "$sandbox_name" >/dev/null 2>&1 || true
+
+    if (( sync_failed )); then
+      printf 'pi-openshell: download/sync failed; sandbox retained as %s\n' \
+        "$sandbox_name" >&2
+      (( status == 0 )) && status=1
+    else
+      openshell sandbox delete "$sandbox_name" >/dev/null 2>&1 || true
+    fi
   fi
 
+  [[ -z "$download_stage" ]] || rm -rf -- "$download_stage"
+  [[ -z "$tracked_manifest" ]] || rm -f -- "$tracked_manifest"
   exit "$status"
 }
 trap cleanup EXIT
 
-printf 'pi-openshell: uploading %s to sandbox %s\n' "$PWD" "$sandbox_name" >&2
+if [[ -n "$git_dir" ]]; then
+  if ! command -v rsync >/dev/null 2>&1; then
+    printf 'pi-openshell: rsync is required to safely restore Git workspaces\n' >&2
+    exit 127
+  fi
+  tracked_manifest="$(mktemp)"
+  git -C "$host_workspace" ls-files -z >"$tracked_manifest"
+fi
 
-# The customization directory is used as a local Dockerfile source. Only the
-# current workspace is uploaded to the resulting sandbox. Keep this command in
-# the foreground so OpenShell can connect its PTY to the user's terminal.
-sandbox_created=1
+printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
+
+# Create an idle sandbox with the normally filtered working tree first. A
+# separate upload can then disable filtering for .git alone; applying
+# --no-git-ignore to sandbox create would also expose every ignored file.
 sandbox_args=(
   --name "$sandbox_name"
   --from "$CUSTOMIZATIONS_DIR"
-  --upload "$PWD:/workspace"
-  --tty
+  --upload "$host_workspace:/workspace"
+  --no-tty
 )
 if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
   openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
-  sandbox_args+=(--policy "$openshell_policy")
-fi
-if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
-  sandbox_args+=(--provider "$openshell_provider")
+  sandbox_args+=(--policy "$openshell_policy" --provider "$openshell_provider")
 fi
 
-# OpenShell executes the requested command directly rather than relying on
-# the image ENTRYPOINT, so invoke the credential adapter explicitly.
-openshell sandbox create "${sandbox_args[@]}" -- /usr/local/bin/pi-openshell-entrypoint pi "$@"
+if ! openshell sandbox create "${sandbox_args[@]}" -- true; then
+  if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
+    printf 'pi-openshell: creation failed; sandbox retained as %s\n' "$sandbox_name" >&2
+  fi
+  exit 1
+fi
+sandbox_created=1
+
+if [[ -n "$git_dir" ]]; then
+  printf 'pi-openshell: uploading Git metadata from %s\n' "$git_dir" >&2
+  if ! openshell sandbox upload --no-git-ignore \
+    "$sandbox_name" "$git_dir" "$sandbox_workspace"; then
+    sandbox_created=0
+    printf 'pi-openshell: Git metadata upload failed; sandbox retained as %s\n' \
+      "$sandbox_name" >&2
+    exit 1
+  fi
+fi
+
+exec_args=(
+  --name "$sandbox_name"
+  --workdir "$sandbox_workdir"
+  --tty
+)
+# Git identity is non-secret and is scoped to this command. Host credential
+# helpers, signing keys, and global Git configuration are never transferred.
+if [[ -n "$git_name" ]]; then
+  exec_args+=(--env "GIT_AUTHOR_NAME=$git_name" --env "GIT_COMMITTER_NAME=$git_name")
+fi
+if [[ -n "$git_email" ]]; then
+  exec_args+=(--env "GIT_AUTHOR_EMAIL=$git_email" --env "GIT_COMMITTER_EMAIL=$git_email")
+fi
+
+# OpenShell executes commands directly rather than through the image
+# ENTRYPOINT, so invoke the credential adapter explicitly.
+openshell sandbox exec "${exec_args[@]}" -- \
+  /usr/local/bin/pi-openshell-entrypoint pi "$@"
