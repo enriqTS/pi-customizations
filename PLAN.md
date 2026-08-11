@@ -1,12 +1,12 @@
 # Plan
 
-Objective: make failed OpenShell workspace downloads recoverable and prevent ignored build artifacts from overwhelming transfers.
+Objective: execute `OPENSHELL_MIGRATION_PLAN.md` by extracting reusable OpenShell infrastructure into a versioned `openshell-environments` repository and reducing this repository to Pi-owned assets plus a thin integration.
 
 Approach:
-- Prune Git-ignored files in the sandbox before workspace download, while preserving tracked and untracked non-ignored work.
-- Add explicit wrapper recovery modes for re-entering or immediately re-downloading a retained sandbox.
-- Document recovery commands and add lifecycle tests with a fake OpenShell CLI.
+1. Inventory and classify the current implementation, dependencies, tests, and pre-migration baseline.
+2. Create the shared repository with durable docs, base image/toolchain, generic lifecycle helpers, composable policy, and parity tests.
+3. Add the Pi client integration while retaining Pi settings, sessions, provider, patch, and resources here.
+4. Pin dependency delivery and image compatibility; add explicit image build/inspection/cleanup commands rather than per-launch source builds.
+5. Cut over the Pi adapter, run the test/security baseline, document rollback, then remove only proven duplication.
 
-Status: complete. The wrapper now excludes ignored sandbox artifacts from downloads, supports `--recover` and `--recover-download`, documents both flows, and has integration coverage. Retained sandbox `pi-dothoard-313599` remains available for the user to recover from `/home/henrique/Projetos/dothoard`.
-
-Deferred: migrate shared OpenShell infrastructure first; only then replace per-launch source builds with explicitly built, versioned OCI artifacts as recorded in `OPENSHELL_MIGRATION_PLAN.md`.
+Status: in progress — inventory and baseline capture started.

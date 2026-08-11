@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+phase="${1:-}"
+sandbox_name="${2:-}"
+host_workdir="${3:-}"
+sandbox_workdir="${4:-}"
+context="${5:-}"
+
+encode_session_dir() {
+  local path="$1" name
+  name="--${path#/}--"
+  name="${name//\//-}"
+  printf '%s' "${name//:/-}"
+}
+
+host_agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+host_session_name="$(encode_session_dir "$host_workdir")"
+host_session_dir="${PI_OPENSHELL_SESSION_DIR:-$host_agent_dir/sessions/$host_session_name}"
+sandbox_session_name="$(encode_session_dir "$sandbox_workdir")"
+sandbox_session_root="/workspace/.pi-openshell-sessions"
+sandbox_session_dir="$sandbox_session_root/$sandbox_session_name"
+settings_helper="$ROOT/bin/pi-openshell-settings.mjs"
+session_helper="$ROOT/bin/pi-openshell-sessions.mjs"
+host_settings="${PI_OPENSHELL_SETTINGS_PATH:-$host_agent_dir/settings.json}"
+
+case "$phase" in
+  prepare)
+    command -v node >/dev/null 2>&1 || { printf 'pi-openshell-client: node is required\n' >&2; exit 127; }
+    [[ -f "$settings_helper" && -f "$session_helper" ]] || { printf 'pi-openshell-client: Pi synchronization helpers are missing\n' >&2; exit 1; }
+    node "$settings_helper" "$host_settings" "$context/pi-openshell-settings.json"
+    mkdir -p -- "$context/sessions/$sandbox_session_name"
+    node "$session_helper" translate \
+      "$host_session_dir" "$context/sessions/$sandbox_session_name" \
+      "$host_workdir" "$sandbox_workdir" \
+      "$host_session_dir" "$sandbox_session_dir"
+    ;;
+  upload)
+    printf 'pi-openshell: uploading sanitized Pi settings\n' >&2
+    openshell sandbox upload --no-git-ignore \
+      "$sandbox_name" "$context/pi-openshell-settings.json" /tmp
+    printf 'pi-openshell: uploading project sessions\n' >&2
+    openshell sandbox upload --no-git-ignore \
+      "$sandbox_name" "$context/sessions/$sandbox_session_name" \
+      "$sandbox_session_root"
+    ;;
+  download)
+    stage="$(mktemp -d)"
+    trap 'rm -rf -- "$stage"' EXIT
+    printf 'pi-openshell: downloading session changes...\n' >&2
+    openshell sandbox download "$sandbox_name" "$sandbox_session_dir" "$stage"
+    node "$session_helper" translate \
+      "$stage" "$host_session_dir" \
+      "$sandbox_workdir" "$host_workdir" \
+      "$sandbox_session_dir" "$host_session_dir"
+    ;;
+  exec-env)
+    printf '%s\n' \
+      'HOME=/home/pi' \
+      'PI_CODING_AGENT_DIR=/home/pi/.pi/agent' \
+      "PI_CODING_AGENT_SESSION_DIR=$sandbox_session_dir" \
+      'PI_OPENSHELL_SANITIZED_SETTINGS=/tmp/pi-openshell-settings.json'
+    ;;
+  *) printf 'pi-openshell-client: unknown phase: %s\n' "$phase" >&2; exit 2 ;;
+esac

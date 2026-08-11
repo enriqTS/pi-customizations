@@ -1,346 +1,60 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Resolve the repository even when this script is installed through a symlink.
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 CUSTOMIZATIONS_DIR="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+REQUIRED_VERSION="$(<"$CUSTOMIZATIONS_DIR/openshell-environments.version")"
+DEFAULT_ENVIRONMENTS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/openshell-environments/$REQUIRED_VERSION"
+ENVIRONMENTS_DIR="${PI_OPENSHELL_ENVIRONMENTS_DIR:-$DEFAULT_ENVIRONMENTS_DIR}"
 
-if [[ -z "${OPENSHELL_GATEWAY:-}" ]]; then
-  export OPENSHELL_GATEWAY=local
-fi
-
-recovery_mode=""
-recovery_sandbox=""
-case "${1:-}" in
-  --recover)
-    recovery_mode="interactive"
-    recovery_sandbox="${2:-}"
-    shift 2 || true
-    ;;
-  --recover-download)
-    recovery_mode="download"
-    recovery_sandbox="${2:-}"
-    shift 2 || true
-    ;;
-esac
-if [[ -n "$recovery_mode" && -z "$recovery_sandbox" ]]; then
-  if [[ "$recovery_mode" == "download" ]]; then
-    recovery_option="--recover-download"
-  else
-    recovery_option="--recover"
-  fi
-  printf 'usage: pi-openshell %s SANDBOX [PI_ARGS...]\n' \
-    "$recovery_option" >&2
-  exit 2
-fi
-
-if [[ ! -d "$PWD" ]]; then
-  printf 'pi-openshell: current directory does not exist: %s\n' "$PWD" >&2
+if [[ ! -f "$ENVIRONMENTS_DIR/VERSION" || "$(<"$ENVIRONMENTS_DIR/VERSION")" != "$REQUIRED_VERSION" || \
+      ! -f "$ENVIRONMENTS_DIR/API_VERSION" || "$(<"$ENVIRONMENTS_DIR/API_VERSION")" != 1 ]]; then
+  printf 'pi-openshell: openshell-environments %s (API 1) is required at %s\n' \
+    "$REQUIRED_VERSION" "$ENVIRONMENTS_DIR" >&2
+  printf 'Install it with: %s/bin/install-openshell-environments\n' "$CUSTOMIZATIONS_DIR" >&2
+  printf 'For development, set PI_OPENSHELL_ENVIRONMENTS_DIR to an explicit compatible checkout.\n' >&2
   exit 1
 fi
+shared_launcher="$ENVIRONMENTS_DIR/bin/openshell-workspace"
+[[ -x "$shared_launcher" ]] || { printf 'pi-openshell: shared launcher is not executable: %s\n' "$shared_launcher" >&2; exit 1; }
 
-if ! command -v openshell >/dev/null 2>&1; then
-  printf 'pi-openshell: openshell CLI is not installed or not on PATH\n' >&2
-  exit 127
-fi
-
-# Attach gateway-owned providers without copying Pi's auth.json into the
-# sandbox. Set PI_OPENSHELL_PROVIDER=none to disable this behavior.
+recovery=0
+case "${1:-}" in --recover|--recover-download) recovery=1;; esac
 openshell_provider="${PI_OPENSHELL_PROVIDER:-}"
-if [[ -n "$recovery_mode" ]]; then
-  # The retained sandbox already has its provider and ephemeral credentials.
-  openshell_provider="none"
-elif [[ "$openshell_provider" != "none" && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
-  if [[ -z "$openshell_provider" ]]; then
-    openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-pi-codex}"
-  fi
+if ((recovery)); then
+  openshell_provider=none
+elif [[ "$openshell_provider" != none && -f "${PI_CREDENTIALS_PATH:-$HOME/.pi/agent/auth.json}" ]]; then
+  [[ -n "$openshell_provider" ]] || openshell_provider="${PI_OPENSHELL_CODEX_PROVIDER:-pi-codex}"
   provider_profile="$CUSTOMIZATIONS_DIR/providers/pi-codex.yaml"
   if ! openshell provider profile export pi-codex >/dev/null 2>&1; then
     openshell provider profile import --file "$provider_profile" >/dev/null
   fi
   provider_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-provider"
-  if [[ ! -x "$provider_helper" ]]; then
-    printf 'pi-openshell: provider helper is not executable: %s\n' "$provider_helper" >&2
-    exit 1
-  fi
+  [[ -x "$provider_helper" ]] || { printf 'pi-openshell: provider helper is not executable: %s\n' "$provider_helper" >&2; exit 1; }
   printf 'pi-openshell: synchronizing OpenShell provider %s\n' "$openshell_provider" >&2
   PI_OPENSHELL_CODEX_PROVIDER="$openshell_provider" "$provider_helper"
 fi
 
-# Use the repository root as the transferred workspace and preserve ordinary
-# .git directories separately. Linked worktrees and external object stores can
-# reference host paths, so they are deliberately unsupported.
-host_workspace="$(pwd -P)"
-host_workdir="$host_workspace"
-relative_workdir=""
-git_dir=""
-git_name=""
-git_email=""
-if git -C "$host_workspace" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  repo_root="$(git -C "$host_workspace" rev-parse --show-toplevel)"
-  repo_root="$(cd -- "$repo_root" && pwd -P)"
-  case "$host_workspace/" in
-    "$repo_root/"*) ;;
-    *)
-      printf 'pi-openshell: current directory is outside resolved repository root\n' >&2
-      exit 1
-      ;;
-  esac
-  relative_workdir="${host_workspace#"$repo_root"}"
-  host_workspace="$repo_root"
-
-  git_dir="$(git -C "$repo_root" rev-parse --absolute-git-dir)"
-  git_dir="$(readlink -f -- "$git_dir")"
-  if [[ "$git_dir" != "$repo_root/.git" || ! -d "$repo_root/.git" || -L "$repo_root/.git" ]]; then
-    printf 'pi-openshell: only an ordinary repository-root .git directory is supported\n' >&2
-    exit 1
-  fi
-  "$CUSTOMIZATIONS_DIR/bin/pi-openshell-git-check" "$git_dir"
-  git_name="$(git -C "$repo_root" config user.name || true)"
-  git_email="$(git -C "$repo_root" config user.email || true)"
-fi
-
-# OpenShell preserves the source directory basename when uploading. Keep the
-# repository under /workspace and execute from the matching relative path.
-sandbox_workspace="/workspace/$(basename -- "$host_workspace")"
-sandbox_workdir="$sandbox_workspace$relative_workdir"
-
-# OpenShell names must be stable enough for logs but unique per invocation.
-project_name="$(basename -- "$host_workspace" | tr '[:upper:]' '[:lower:]' | tr -cs '[:lower:][:digit:]' '-' | sed 's/^-*//; s/-*$//')"
-project_name="${project_name:-workspace}"
-# OpenShell limits sandbox names to 19 characters.
-project_name="${project_name:0:8}"
-sandbox_name="${recovery_sandbox:-pi-${project_name}-$$}"
-
-sandbox_created=0
-tracked_manifest=""
-download_stage=""
-config_stage=""
-session_stage=""
-session_download_stage=""
-host_agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-host_session_name="--${host_workdir#/}--"
-host_session_name="${host_session_name//\//-}"
-host_session_name="${host_session_name//:/-}"
-host_session_dir="${PI_OPENSHELL_SESSION_DIR:-$host_agent_dir/sessions/$host_session_name}"
-sandbox_session_name="--${sandbox_workdir#/}--"
-sandbox_session_name="${sandbox_session_name//\//-}"
-sandbox_session_name="${sandbox_session_name//:/-}"
-sandbox_session_root="/workspace/.pi-openshell-sessions"
-sandbox_session_dir="$sandbox_session_root/$sandbox_session_name"
-session_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-sessions.mjs"
-cleanup() {
-  local status=$?
-  local sync_failed=0
-  local prune_failed=0
-  trap - EXIT INT TERM
-
-  if (( sandbox_created )); then
-    printf '\npi-openshell: downloading session changes...\n' >&2
-    session_download_stage="$(mktemp -d)"
-    if ! openshell sandbox download \
-      "$sandbox_name" "$sandbox_session_dir" "$session_download_stage"; then
-      sync_failed=1
-    elif ! node "$session_helper" translate \
-      "$session_download_stage" "$host_session_dir" \
-      "$sandbox_workdir" "$host_workdir" \
-      "$sandbox_session_dir" "$host_session_dir"; then
-      sync_failed=1
-    fi
-
-    printf 'pi-openshell: downloading workspace changes...\n' >&2
-    if [[ -n "$git_dir" ]]; then
-      # Mirror the upload filter before downloading. Build outputs and other
-      # ignored files created in the sandbox can be enormous, are reproducible,
-      # and must not overwrite ignored files that already exist on the host.
-      printf 'pi-openshell: removing Git-ignored sandbox artifacts...\n' >&2
-      if ! openshell sandbox exec \
-        --name "$sandbox_name" --workdir "$sandbox_workspace" --no-tty -- \
-        git clean -fdX; then
-        sync_failed=1
-        prune_failed=1
-      fi
-      download_stage="$(mktemp -d)"
-      if (( prune_failed )); then
-        :
-      elif ! openshell sandbox download \
-        "$sandbox_name" "$sandbox_workspace" "$download_stage"; then
-        sync_failed=1
-      elif ! rsync -a -- "$download_stage/" "$host_workspace/"; then
-        sync_failed=1
-      elif ! rsync -a --delete -- \
-        "$download_stage/.git/" "$host_workspace/.git/"; then
-        sync_failed=1
-      else
-        # Archive extraction cannot delete host files. Remove only paths that
-        # were tracked before upload and are absent from the sandbox snapshot;
-        # ignored host files were never uploaded and must remain untouched.
-        while IFS= read -r -d '' tracked_path; do
-          if [[ ! -e "$download_stage/$tracked_path" && \
-                ! -L "$download_stage/$tracked_path" ]]; then
-            rm -f -- "$host_workspace/$tracked_path" || sync_failed=1
-          fi
-        done <"$tracked_manifest"
-      fi
-    elif ! openshell sandbox download \
-      "$sandbox_name" "$sandbox_workspace" "$host_workspace"; then
-      sync_failed=1
-    fi
-
-    if (( sync_failed )); then
-      printf 'pi-openshell: download/sync failed; sandbox retained as %s\n' \
-        "$sandbox_name" >&2
-      (( status == 0 )) && status=1
-    else
-      openshell sandbox delete "$sandbox_name" >/dev/null 2>&1 || true
-    fi
-  fi
-
-  [[ -z "$download_stage" ]] || rm -rf -- "$download_stage"
-  [[ -z "$tracked_manifest" ]] || rm -f -- "$tracked_manifest"
-  [[ -z "$config_stage" ]] || rm -rf -- "$config_stage"
-  [[ -z "$session_stage" ]] || rm -rf -- "$session_stage"
-  [[ -z "$session_download_stage" ]] || rm -rf -- "$session_download_stage"
-  exit "$status"
-}
-trap cleanup EXIT
-
-if [[ -n "$git_dir" ]]; then
-  if ! command -v rsync >/dev/null 2>&1; then
-    printf 'pi-openshell: rsync is required to safely restore Git workspaces\n' >&2
-    exit 127
-  fi
-  tracked_manifest="$(mktemp)"
-  git -C "$host_workspace" ls-files -z >"$tracked_manifest"
-fi
-
-# Copy only explicitly allowlisted preferences. Resource locations are replaced
-# with paths baked from this reviewed repository; credentials, provider config,
-# trust state, sessions, arbitrary paths, and command-bearing settings are
-# never included.
-settings_helper="$CUSTOMIZATIONS_DIR/bin/pi-openshell-settings.mjs"
-host_settings="${PI_OPENSHELL_SETTINGS_PATH:-${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json}"
-if ! command -v node >/dev/null 2>&1; then
-  printf 'pi-openshell: node is required to sanitize Pi settings\n' >&2
-  exit 127
-fi
-if [[ ! -f "$settings_helper" ]]; then
-  printf 'pi-openshell: settings sanitizer is missing: %s\n' "$settings_helper" >&2
-  exit 1
-fi
-if [[ ! -f "$session_helper" ]]; then
-  printf 'pi-openshell: session synchronizer is missing: %s\n' "$session_helper" >&2
-  exit 1
-fi
-if [[ -n "$recovery_mode" ]]; then
-  if ! openshell sandbox get "$sandbox_name" >/dev/null; then
-    printf 'pi-openshell: retained sandbox not found: %s\n' "$sandbox_name" >&2
-    exit 1
-  fi
-  sandbox_created=1
-  printf 'pi-openshell: recovering retained sandbox %s\n' "$sandbox_name" >&2
-  if [[ "$recovery_mode" == "download" ]]; then
-    exit 0
-  fi
-else
-  config_stage="$(mktemp -d)"
-  node "$settings_helper" "$host_settings" "$config_stage/pi-openshell-settings.json"
-  session_stage="$(mktemp -d)"
-  mkdir -p -- "$session_stage/$sandbox_session_name"
-  node "$session_helper" translate \
-    "$host_session_dir" "$session_stage/$sandbox_session_name" \
-    "$host_workdir" "$sandbox_workdir" \
-    "$host_session_dir" "$sandbox_session_dir"
-
-  printf 'pi-openshell: uploading %s to sandbox %s\n' "$host_workspace" "$sandbox_name" >&2
-
-  # Create an idle sandbox with the normally filtered working tree first. A
-  # separate upload can then disable filtering for .git alone; applying
-  # --no-git-ignore to sandbox create would also expose every ignored file.
-  sandbox_args=(
-    --name "$sandbox_name"
-    --from "$CUSTOMIZATIONS_DIR"
-    --upload "$host_workspace:/workspace"
-    --no-tty
-  )
-  openshell_policy="${PI_OPENSHELL_POLICY:-$CUSTOMIZATIONS_DIR/openshell-policy.yaml}"
-  sandbox_args+=(--policy "$openshell_policy")
-  if [[ -n "${openshell_provider:-}" && "$openshell_provider" != "none" ]]; then
-    sandbox_args+=(--provider "$openshell_provider")
-  fi
-
-  if ! openshell sandbox create "${sandbox_args[@]}" -- true; then
-    if openshell sandbox get "$sandbox_name" >/dev/null 2>&1; then
-      printf 'pi-openshell: creation failed; sandbox retained as %s\n' "$sandbox_name" >&2
-    fi
-    exit 1
-  fi
-  sandbox_created=1
-
-  if [[ -n "$git_dir" ]]; then
-    printf 'pi-openshell: uploading Git metadata from %s\n' "$git_dir" >&2
-    if ! openshell sandbox upload --no-git-ignore \
-      "$sandbox_name" "$git_dir" "$sandbox_workspace"; then
-      sandbox_created=0
-      printf 'pi-openshell: Git metadata upload failed; sandbox retained as %s\n' \
-        "$sandbox_name" >&2
-      exit 1
-    fi
-  fi
-
-  printf 'pi-openshell: uploading sanitized Pi settings\n' >&2
-  if ! openshell sandbox upload --no-git-ignore \
-    "$sandbox_name" "$config_stage/pi-openshell-settings.json" /tmp; then
-    sandbox_created=0
-    printf 'pi-openshell: Pi settings upload failed; sandbox retained as %s\n' \
-      "$sandbox_name" >&2
-    exit 1
-  fi
-
-  printf 'pi-openshell: uploading project sessions\n' >&2
-  if ! openshell sandbox upload --no-git-ignore \
-    "$sandbox_name" "$session_stage/$sandbox_session_name" \
-    "$sandbox_session_root"; then
-    sandbox_created=0
-    printf 'pi-openshell: session upload failed; sandbox retained as %s\n' \
-      "$sandbox_name" >&2
-    exit 1
-  fi
-fi
-
-exec_args=(
-  --name "$sandbox_name"
-  --workdir "$sandbox_workdir"
-  --env "HOME=/home/pi"
-  --env "PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
-  --env "PI_CODING_AGENT_SESSION_DIR=$sandbox_session_dir"
-  --env "PI_OPENSHELL_SANITIZED_SETTINGS=/tmp/pi-openshell-settings.json"
-  --tty
+image="${PI_OPENSHELL_IMAGE:-localhost/openshell-environments/pi:$REQUIRED_VERSION}"
+policy="${PI_OPENSHELL_POLICY:-$ENVIRONMENTS_DIR/clients/pi/policy.yaml}"
+build_hint="PI_OPENSHELL_ENVIRONMENTS_DIR=$(printf %q "$ENVIRONMENTS_DIR") $(printf %q "$ENVIRONMENTS_DIR/bin/openshell-image") build all --pi-source $(printf %q "$CUSTOMIZATIONS_DIR")"
+launcher_args=(
+  --image "$image"
+  --policy "$policy"
+  --name-prefix pi
+  --client-hook "$CUSTOMIZATIONS_DIR/bin/pi-openshell-client"
+  --command /usr/local/bin/pi-openshell-entrypoint
+  --command-arg pi
+  --recovery-command pi
+  --build-hint "$build_hint"
 )
-# OpenShell's PTY does not preserve COLORTERM. Forward only the standard
-# true-color capability values so Pi does not degrade themes to strong 256-color
-# approximations. Terminal-specific image-protocol variables stay isolated.
-host_colorterm="${COLORTERM:-}"
-case "${host_colorterm,,}" in
-  truecolor|24bit) exec_args+=(--env "COLORTERM=${host_colorterm,,}") ;;
-esac
-
-# Git identity is non-secret and is scoped to this command. Host credential
-# helpers, signing keys, and global Git configuration are never transferred.
-if [[ -n "$git_name" ]]; then
-  exec_args+=(--env "GIT_AUTHOR_NAME=$git_name" --env "GIT_COMMITTER_NAME=$git_name")
-fi
-if [[ -n "$git_email" ]]; then
-  exec_args+=(--env "GIT_AUTHOR_EMAIL=$git_email" --env "GIT_COMMITTER_EMAIL=$git_email")
+[[ -z "$openshell_provider" || "$openshell_provider" == none ]] || launcher_args+=(--provider "$openshell_provider")
+if ((recovery)); then
+  recovery_option="$1"
+  recovery_sandbox="${2:-}"
+  [[ -n "$recovery_sandbox" ]] || { printf 'usage: pi-openshell %s SANDBOX [PI_ARGS...]\n' "$recovery_option" >&2; exit 2; }
+  launcher_args+=("$recovery_option" "$recovery_sandbox")
+  shift 2
 fi
 
-# OpenShell executes commands directly rather than through the image
-# ENTRYPOINT, so invoke the credential adapter explicitly.
-if [[ "$recovery_mode" == "interactive" ]]; then
-  # The entrypoint consumed the one-shot settings file on the original launch.
-  # Reuse the initialized Pi profile and credentials already in the sandbox.
-  openshell sandbox exec "${exec_args[@]}" -- pi "$@"
-else
-  openshell sandbox exec "${exec_args[@]}" -- \
-    /usr/local/bin/pi-openshell-entrypoint pi "$@"
-fi
+exec "$shared_launcher" "${launcher_args[@]}" -- "$@"

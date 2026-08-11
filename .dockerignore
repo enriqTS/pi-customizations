@@ -1,5 +1,0 @@
-.git
-.gitignore
-Dockerfile.*
-*.log
-node_modules

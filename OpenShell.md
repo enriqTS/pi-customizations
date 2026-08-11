@@ -1,421 +1,62 @@
-# Run pi in OpenShell
+# Run Pi in OpenShell
 
-This repository is the build context for a pi image containing the versioned
-customizations. The customization repository is copied into the image; it is
-**not mounted into the sandbox at runtime**.
+Shared image, policy, gateway, workspace/Git lifecycle, and recovery behavior live in [`openshell-environments`](https://github.com/enriqTS/openshell-environments). This repository owns Pi resources and the thin client integration.
 
-## Prerequisites
+## Compatibility and installation
 
-- Docker (to build the image)
-- OpenShell CLI
-- `git` and `rsync` on the host for repository transfer
-- An OpenShell gateway
-- A provider configured for either inference routing or sandbox credentials
-
-## Build the image
-
-Run this from the root of this repository. The current directory is the
-image build context, so the command is independent of where the repository is
-checked out:
+This revision requires `openshell-environments` 0.1.0, launcher API 1. Install the tagged dependency:
 
 ```bash
-cd /path/to/pi-customizations
-docker buildx build \
-  --pull \
-  --load \
-  -t pi-customized \
-  .
+bin/install-openshell-environments
 ```
 
-`buildx` uses Docker's current BuildKit builder and avoids the legacy-builder
-warning. `--pull` checks for a newer base image, while `--load` imports the
-result into the local Docker image store for OpenShell to use.
-
-Rebuild after changing this repository and periodically for base-image security
-updates. The image contains:
-
-- extensions, skills, and themes from this repository
-- `APPEND_SYSTEM.md`
-- subagent definitions from `agents/`
-
-It also includes Node/npm/Corepack, Python with `uv` and `ruff`, the current
-official Rust toolchain with Cargo, Rustfmt, and Clippy, the latest Terraform
-release, the OpenSSH client, and native build prerequisites for common project
-workflows. The client supports realistic command/error-handling tests, but
-outbound SSH remains blocked because the network policy permits only ports 80
-and 443. A baked extension blocks Pi Bash-tool invocations of `terraform apply`; use
-`terraform fmt`, `validate`, or `plan` instead. It
-intentionally does not contain `~/.pi/agent/auth.json`, SSH keys, or any other
-host files. The wrapper transfers only the current project's Pi sessions at
-runtime; they are not baked into the image.
-
-## Start a local gateway
-
-The Python-installed CLI does not include the gateway daemon. The `local`
-registration only tells the CLI where to connect; it does not start a server.
-For a local Docker driver, run the official gateway container:
+Before the release exists remotely, or while developing both repositories, install from an explicit checkout:
 
 ```bash
-H="$HOME"
-mkdir -p \
-  "$H/openshell/supervisor" \
-  "$H/.local/state/openshell" \
-  "$H/.local/share/openshell" \
-  "$H/.config/openshell"
-
-docker create --name tmp-supervisor \
-  ghcr.io/nvidia/openshell/supervisor:latest
-
-docker cp tmp-supervisor:/openshell-sandbox \
-  "$H/openshell/supervisor/openshell-sandbox"
-docker rm tmp-supervisor
-chmod +x "$H/openshell/supervisor/openshell-sandbox"
-
-# Generate the gateway mTLS certificates and sandbox JWT signing keys.
-docker run --rm \
-  -e HOME="$H" \
-  -v "$H/.local/state/openshell:$H/.local/state/openshell" \
-  -v "$H/.config/openshell:$H/.config/openshell" \
-  ghcr.io/nvidia/openshell/gateway:latest \
-  generate-certs \
-  --output-dir "$H/.local/state/openshell/tls" \
-  --server-san host.openshell.internal
-
-docker run -d \
-  --name openshell-gateway \
-  --restart unless-stopped \
-  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  -p 0.0.0.0:8080:8080 \
-  -v "$H/.local/state/openshell:$H/.local/state/openshell" \
-  -v "$H/.local/share/openshell:$H/.local/share/openshell" \
-  -v "$H/.config/openshell:$H/.config/openshell" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$H/openshell/supervisor/openshell-sandbox:$H/openshell/supervisor/openshell-sandbox:ro" \
-  -e HOME="$H" \
-  -e OPENSHELL_DRIVERS=docker \
-  -e OPENSHELL_GRPC_ENDPOINT=https://host.openshell.internal:8080 \
-  -e OPENSHELL_DOCKER_SUPERVISOR_BIN="$H/openshell/supervisor/openshell-sandbox" \
-  -e OPENSHELL_DB_URL=sqlite:"$H/.local/state/openshell/openshell.db" \
-  -e OPENSHELL_LOCAL_TLS_DIR="$H/.local/state/openshell/tls" \
-  -e OPENSHELL_TLS_CERT="$H/.local/state/openshell/tls/server/tls.crt" \
-  -e OPENSHELL_TLS_KEY="$H/.local/state/openshell/tls/server/tls.key" \
-  -e OPENSHELL_TLS_CLIENT_CA="$H/.local/state/openshell/tls/ca.crt" \
-  -e OPENSHELL_ENABLE_MTLS_AUTH=true \
-  -e OPENSHELL_DOCKER_TLS_CA="$H/.local/state/openshell/tls/ca.crt" \
-  -e OPENSHELL_DOCKER_TLS_CERT="$H/.local/state/openshell/tls/client/tls.crt" \
-  -e OPENSHELL_DOCKER_TLS_KEY="$H/.local/state/openshell/tls/client/tls.key" \
-  ghcr.io/nvidia/openshell/gateway:latest
+PI_OPENSHELL_ENVIRONMENTS_SOURCE=/path/to/openshell-environments \
+  bin/install-openshell-environments
 ```
 
-The gateway needs the Docker socket to create sandbox containers. The numeric
-`--group-add` value is the socket's host group ID; using the name `docker` is
-not portable because that group may not exist inside the gateway image. The
-state and data directories are bind-mounted because the gateway runs as an
-unprivileged user. The gateway JWT keys are required even when CLI access uses
-mTLS: sandbox containers use gateway-minted JWTs to authenticate back to it.
-The endpoint is published on the Docker bridge and uses mTLS. The Docker
-sandbox network must reach the gateway callback, so do not bind this port only
-to `127.0.0.1`. Restrict port 8080 with the host firewall if the machine is
-reachable from an untrusted network.
+An explicit non-installed checkout may instead be selected with `PI_OPENSHELL_ENVIRONMENTS_DIR`. The wrapper validates both `VERSION` and `API_VERSION`; it never relies on an unversioned sibling checkout.
 
-Register and select the TLS gateway:
+Build the deliberately tagged base and Pi images after installation or after changing either repository:
 
 ```bash
-openshell gateway remove local 2>/dev/null || true
-openshell gateway add https://127.0.0.1:8080 --local --name local
-openshell gateway select local
-openshell status
+shared="$HOME/.local/share/openshell-environments/0.1.0"
+"$shared/bin/openshell-image" build all --pi-source "$PWD"
+"$shared/bin/openshell-image" inspect pi
 ```
 
-If `local` is already registered, use `openshell gateway remove local` before
-running the `gateway add` command again, or simply select it after the gateway
-is running.
+The launcher uses the full reference `localhost/openshell-environments/pi:0.1.0`. It fails with the build command when that image is absent and never rebuilds on Pi startup. Set `PI_OPENSHELL_IMAGE` only to another full versioned reference. Use `openshell-image cleanup` to remove this version's images.
 
-Check gateway logs with:
+## Launch
 
-```bash
-docker logs -f openshell-gateway
-```
-
-## Make `pi` seamless
-
-`bin/pi-openshell` is a host-side wrapper. Install it as `pi` in a directory
-before the normal pi installation on your `PATH`:
+Install the adapter before the ordinary Pi executable on `PATH`:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
-ln -sf "$HOME/Projetos/pi-customizations/bin/pi-openshell" \
-  "$HOME/.local/bin/pi"
+ln -sf "$HOME/Projetos/pi-customizations/bin/pi-openshell" "$HOME/.local/bin/pi"
 ```
 
-For **fish**, add the directory to your path with:
+Then run `pi` in a project. The shared launcher snapshots the repository root and checked `.git`, executes Pi in the corresponding subdirectory, synchronizes current-project Pi sessions, downloads changes, and deletes the sandbox only after successful synchronization.
 
-```fish
-fish_add_path "$HOME/.local/bin"
-```
-
-For **bash** or **zsh**, add this to your shell profile (`~/.bashrc`,
-`~/.zshrc`, etc.):
+Do not edit the same host checkout or project sessions concurrently. Recovery from the original project/subdirectory preserves a retained sandbox without reuploading host files:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+pi --recover SANDBOX
+pi --recover-download SANDBOX
 ```
 
-Open a new shell if necessary, then confirm the wrapper is selected:
+## Pi-owned state and credentials
 
-```bash
-command -v pi
-```
+`bin/pi-openshell-client` sanitizes host settings and transfers only current-project session JSONL files. It translates host/sandbox cwd and local parent-session paths. It never transfers `auth.json`, arbitrary settings paths, trust state, other projects' sessions, SSH keys, or the host home.
 
-From any project directory, simply run:
+`bin/pi-openshell-provider` synchronizes host Codex OAuth into the gateway-owned `pi-codex` provider. `providers/pi-codex.yaml` restricts credential substitution to Pi/Node and matching OpenAI endpoints. The sandbox receives opaque handles only; `bin/pi-openshell-entrypoint` materializes those handles in ephemeral Pi state. Set `PI_OPENSHELL_PROVIDER=none` to disable provider synchronization.
 
-```bash
-cd /path/to/project
-pi
-```
+Pi's writable profile remains `/home/pi/.pi/agent`; reviewed resources are baked under `/opt/pi-customizations`. General public HTTP/HTTPS and filesystem restrictions are defined by the Pi client policy in the shared repository. Port 22 and private/special-use destinations remain blocked.
 
-The wrapper builds the image from this repository, creates a uniquely named
-sandbox, and uploads the project or repository root under
-`/workspace/<directory-name>`. Pi starts in the corresponding directory (also
-when invoked from a repository subdirectory). When Pi exits, the wrapper
-downloads that directory back over the original workspace and deletes the
-sandbox. The customization repository and host home directory are never
-uploaded as workspace data.
+## Rollback
 
-Because the workspace is transferred rather than bind-mounted, changes made
-inside the sandbox are copied back only when pi exits. Review the resulting
-diff before trusting changes from untrusted work.
+The final pre-migration launcher/image is tagged `pre-openshell-migration-20260811` at commit `05d90d3`. To roll back, check out that tag in a separate directory, rebuild its Dockerfile, and point the installed `pi` symlink at that checkout's `bin/pi-openshell`. Do not delete retained sandboxes before recovering needed work.
 
-## Start pi manually
-
-Create a sandbox from the image:
-
-```bash
-openshell sandbox create \
-  --name pi-sandbox \
-  --from "$HOME/Projetos/pi-customizations" \
-  -- pi
-```
-
-When `--from` receives a directory, OpenShell builds its `Dockerfile` using
-the local Docker daemon. This is preferable to using `pi-customized` as a
-bare name, because bare names are resolved as community images and may be
-pulled from the public registry.
-
-The command above runs the complete pi process inside OpenShell. Use a new
-terminal for file transfer when the selected gateway is remote or when the
-workspace is not directly mounted by the gateway.
-
-Upload only the current project. OpenShell preserves the source directory
-basename below the destination:
-
-```bash
-project_name="$(basename "$PWD")"
-openshell sandbox upload pi-sandbox "$PWD" /workspace
-```
-
-After the work is complete, download the resulting project:
-
-```bash
-openshell sandbox download \
-  pi-sandbox "/workspace/$project_name" ./workspace-from-sandbox
-```
-
-For a remote gateway, `/workspace` is sandbox-local. Changes will not appear
-in the host checkout until they are downloaded. Do not upload `~`,
-`~/.pi/agent`, SSH credentials, or parent directories.
-
-## Local Git history
-
-The wrapper preserves Git history without disabling ignore filtering for the
-working tree:
-
-1. It resolves the repository root even when Pi is launched from a subdirectory.
-2. It creates an idle sandbox and uploads the working tree with normal
-   `.gitignore` filtering.
-3. It separately uploads only the ordinary repository-root `.git/` directory
-   with `--no-git-ignore`.
-4. It runs Pi with `sandbox exec` from the corresponding repository
-   subdirectory.
-5. On exit, it removes files matched by the repository's Git ignore rules from
-   the sandbox, downloads to a staging directory, overlays changed files,
-   removes tracked files deleted in the sandbox, synchronizes `.git/` exactly,
-   and only then deletes the sandbox. Host ignored files remain untouched.
-
-The cleanup keeps large reproducible outputs such as Rust `target/` and
-JavaScript `node_modules/` out of the transfer. Store any ignored artifact that
-must be returned under a non-ignored path before exiting Pi.
-
-This supports `git status`, branches, local commits, tags, and reflogs. The
-host's resolved `user.name` and `user.email` are passed as non-secret author
-and committer environment variables, but global Git configuration, signing
-keys, SSH keys, and credential helpers are not transferred.
-
-Before uploading metadata, `bin/pi-openshell-git-check` rejects linked
-worktrees, external object alternates, symlinks within `.git`, local credential
-helpers, auth headers, proxy/SSH commands, includes, URL rewrites, executable
-remote helpers, and credential-bearing remote URLs. Plain remote URLs remain
-in Git metadata. The sandbox permits general HTTP and HTTPS egress, so public
-Git remotes and package registries can be contacted without host credentials.
-
-Linked worktrees and repositories whose Git directory is outside the
-repository root are intentionally unsupported. Avoid editing the host checkout
-while the sandbox is active because transfer is snapshot-based, not a live
-mount. If download fails, the wrapper leaves the sandbox intact and prints its
-name. From the same host project directory, retry synchronization without
-starting Pi:
-
-```bash
-pi --recover-download pi-project-12345
-```
-
-To return to the retained Pi session first and synchronize when it exits:
-
-```bash
-pi --recover pi-project-12345
-```
-
-Both modes reuse the original sandbox without uploading the host checkout.
-They verify that the sandbox still exists, preserve it again if synchronization
-fails, and delete it only after session and workspace synchronization succeed.
-Run recovery from the same project and subdirectory used for the original
-launch so host and sandbox paths map correctly. For a wrapper not installed as
-`pi`, invoke `bin/pi-openshell` with the same options.
-
-## Safe Pi configuration sharing
-
-OpenShell sets `HOME=/workspace` for `sandbox exec`, regardless of the image's
-`HOME`. Without an override, Pi consequently searches `/workspace/.pi/agent`
-instead of the resources baked into `/home/pi/.pi/agent`. Pi's supported agent
-directory override is `PI_CODING_AGENT_DIR` (not `PI_AGENT_DIR`). The wrapper
-therefore executes with both `HOME=/home/pi` and
-`PI_CODING_AGENT_DIR=/home/pi/.pi/agent`; the filesystem policy grants access
-to that Pi profile directory and read-only access to the baked customization
-tree, but not to the rest of the home directory.
-
-Before creating the sandbox, `bin/pi-openshell-settings.mjs` builds a temporary
-`settings.json` using an explicit allowlist of non-executable UI, model,
-compaction, retry, terminal, and display preferences. Resource paths are always
-replaced with the reviewed extensions, skills, and themes baked from
-this repository under `/opt/pi-customizations`. The wrapper uploads this one
-sanitized file separately from the project and `.git` transfers via `/tmp`; the
-entrypoint installs it into the stable agent directory before creating any
-credentials, then removes the staging file. Agents and `APPEND_SYSTEM.md` are
-already baked directly into the stable agent directory.
-
-The sanitizer deliberately excludes arbitrary resource/package paths, project
-trust, proxies, session paths, shell/editor/npm commands, tracking identifiers,
-unknown future settings, and provider configuration. Session synchronization is
-a separate, project-scoped step: the wrapper copies only `.jsonl` files whose
-header cwd matches the invocation directory, translates that cwd to the sandbox
-path, and merges sandbox updates back on exit. This makes `/resume` work without
-exposing sessions from other projects. Set `PI_OPENSHELL_SESSION_DIR` to an
-explicit source directory when the host uses a non-default session location.
-Do not run host and sandbox Pi sessions for the same project concurrently.
-
-The wrapper never transfers:
-
-- `auth.json` or raw OAuth/API credentials
-- `models.json` or other provider configuration
-- other projects' sessions, trust state, logs, caches, or temporary files
-- SSH/GPG keys, credential helpers, shell profiles, or host home directories
-- settings values that embed secrets, execute commands, or reference host paths
-
-The entrypoint writes only OpenShell's injected opaque Codex handles to an
-ephemeral `auth.json` under `PI_CODING_AGENT_DIR`. The wrapper also forwards a
-host `COLORTERM` value only when it is the standard `truecolor` or `24bit`
-capability; otherwise OpenShell's PTY makes Pi fall back to coarse 256-color
-theme approximations. Terminal-specific image protocol variables remain
-isolated. This preserves the existing `pi-codex` provider flow, binary policy,
-startup ordering, and Git synchronization without exposing the host Pi profile.
-
-## Credentials and inference routing
-
-Prefer OpenShell inference routing for supported API-key providers so raw API
-keys remain outside the sandbox. Configure Pi to use `https://inference.local`
-through a corresponding OpenAI- or Anthropic-compatible custom model.
-
-OpenShell 0.0.102 does **not** support the `codex` provider type for cluster
-inference; `openshell inference set --provider codex ...` accepts only OpenAI,
-Anthropic, NVIDIA, DeepInfra, Vertex AI, and Bedrock provider types. ChatGPT
-subscription OAuth therefore uses a sandbox-attached provider instead. Never
-copy the host `~/.pi/agent/auth.json` into the image or upload it.
-
-### Codex OAuth provider
-
-`bin/pi-openshell` synchronizes Pi's `openai-codex` OAuth credential with an
-OpenShell provider named `pi-codex`. The repository's custom
-`providers/pi-codex.yaml` profile extends the built-in Codex endpoint set with
-Pi's `node` and `pi` binary paths. OpenShell requires both the destination and
-the requesting binary to match policy; the built-in profile permits only the
-Codex CLI and therefore rejects Pi with HTTP 403.
-
-Credential values are passed to the OpenShell CLI through environment lookup,
-not command-line arguments. OpenShell injects opaque credential handles—not
-the raw OAuth tokens—into the sandbox. The gateway proxy substitutes the real
-values only on matching outbound requests. The image applies a narrow Pi Codex
-adapter because Pi normally expects a decodable JWT: it uses OpenShell's opaque
-account-ID handle and prevents Pi from trying to refresh an opaque token. The
-host auth file is never uploaded or mounted.
-
-The sandbox policy permits all sandbox binaries to contact public addresses
-over HTTP or HTTPS (ports 80 and 443). OpenShell 0.0.102 rejects top-level host
-wildcards, so the hostless rule explicitly lists public IPv4 space (excluding
-private, special-use, and non-unicast ranges) plus IPv6 global unicast. The
-`pi-codex` provider profile separately keeps credential substitution scoped to
-Pi/Node and its OpenAI endpoints. It can take about one second after startup to
-resolve binary identities, so the entrypoint waits before starting Pi.
-Omitting `network_policies` does not grant unrestricted access; the proxy
-rejects outbound tunnels with HTTP 403. OpenShell has no concise all-ports
-syntax, so non-web ports remain blocked.
-
-Log in on the host first, then run the wrapper normally:
-
-```bash
-pi
-```
-
-The wrapper imports the custom profile when absent, creates or updates the
-workspace-scoped provider, and attaches it with `--provider pi-codex`. It
-extracts the Codex account ID from the OAuth JWT. If the profile definition is
-changed later, delete the custom profile and provider before the next run so
-the wrapper can import the new version; OpenShell profile updates require the
-current gateway resource version.
-
-To use a different provider name, set both variables:
-
-```bash
-export PI_OPENSHELL_CODEX_PROVIDER=my-codex
-export PI_OPENSHELL_PROVIDER=my-codex
-```
-
-Set `PI_OPENSHELL_PROVIDER=none` to disable automatic synchronization and
-attachment. `PI_CREDENTIALS_PATH` can point to a different Pi auth file. Do
-not set `CODEX_AUTH_*` manually in the sandbox, and do not use `--env` for
-these credentials. Rebuild the image after changing this entrypoint. The
-provider still grants the sandbox network access to the matching OpenAI
-endpoints, so keep the gateway policy restricted and use a trusted local
-gateway.
-
-## Build warnings
-
-The `node-domexception` deprecation warning comes from a transitive dependency
-of the pi package (or one of its dependencies), not from the Debian base image.
-The npm version notice is also informational. The Dockerfile deliberately uses
-an explicit current Node major and Debian stable release; rebuild with `--pull`
-to receive updated security patches.
-
-## Isolation checklist
-
-- Build from a reviewed Git revision of this repository.
-- Use an image containing only the tools and customizations required.
-- Upload or mount only the current workspace at `/workspace`.
-- Configure OpenShell filesystem policy to allow writes only under `/workspace`.
-- General HTTP/HTTPS egress is intentional; do not upload secrets or unreviewed
-  sensitive files, and add non-web ports only when required.
-- Do not mount host home directories, `~/.pi/agent`, or SSH credentials.
-- Review the downloaded diff before copying it back over the original checkout.
-
-The container still needs its own system files and the baked-in customization
-files. “Only the workspace” here means no access to the host filesystem beyond
-the explicitly transferred workspace.
+See the shared repository's `docs/security-model.md`, `docs/gateway.md`, and `docs/adding-a-client.md` for common operations and extension rules.

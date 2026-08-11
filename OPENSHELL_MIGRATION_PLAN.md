@@ -4,7 +4,11 @@
 
 Extract reusable OpenShell infrastructure from `pi-customizations` into a dedicated repository before adding VS Code, Codex CLI, Claude Code, or other clients. Keep each client independently permissioned and keep Pi customizations usable without copying unrelated client configuration.
 
-Suggested repository name: `openshell-environments`.
+Implemented repository: `openshell-environments`.
+
+## Completion status
+
+Completed in the 0.1.0/API 1 extraction. Shared toolchain, policy, workspace/Git lifecycle, tests, security/gateway docs, and explicit versioned image lifecycle now live in the dedicated repository. This repository retains Pi resources, settings/session synchronization, Codex compatibility/provider behavior, entrypoint, and a thin pinned adapter. The pre-migration rollback point is tag `pre-openshell-migration-20260811` at commit `05d90d3`.
 
 ## Desired ownership boundary
 

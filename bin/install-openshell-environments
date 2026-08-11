@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+VERSION="$(<"$ROOT/openshell-environments.version")"
+DESTINATION="${PI_OPENSHELL_ENVIRONMENTS_INSTALL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/openshell-environments/$VERSION}"
+SOURCE="${PI_OPENSHELL_ENVIRONMENTS_SOURCE:-https://github.com/enriqTS/openshell-environments.git}"
+
+if [[ -e "$DESTINATION" ]]; then
+  printf 'install-openshell-environments: destination already exists: %s\n' "$DESTINATION" >&2
+  exit 1
+fi
+mkdir -p -- "$(dirname -- "$DESTINATION")"
+if [[ -d "$SOURCE/.git" ]]; then
+  git clone --quiet --no-local "$SOURCE" "$DESTINATION"
+  git -C "$DESTINATION" checkout --quiet "v$VERSION"
+else
+  git clone --quiet --branch "v$VERSION" --depth 1 "$SOURCE" "$DESTINATION"
+fi
+if [[ "$(<"$DESTINATION/VERSION")" != "$VERSION" || "$(<"$DESTINATION/API_VERSION")" != 1 ]]; then
+  rm -rf -- "$DESTINATION"
+  printf 'install-openshell-environments: installed dependency is incompatible\n' >&2
+  exit 1
+fi
+printf 'Installed openshell-environments %s at %s\n' "$VERSION" "$DESTINATION"
+printf 'Build the Pi image with:\n  %q build all --pi-source %q\n' \
+  "$DESTINATION/bin/openshell-image" "$ROOT"

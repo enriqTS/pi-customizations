@@ -1,32 +1,27 @@
 # Pi customizations
 
-Personal, version-controlled Pi configuration source.
+Personal, version-controlled Pi configuration and Pi-owned OpenShell integration.
 
 ## Layout
 
-- `extensions/` — TypeScript extensions
-- `agents/` — subagent definitions (linked directly into Pi; Pi packages do not discover these)
-- `skills/` — Agent Skills
-- `themes/` — themes
+- `extensions/` — TypeScript extensions, including the Terraform apply guard
+- `agents/` — subagent definitions
+- `prompts/` — reusable prompts
+- `skills/` and `themes/` — Pi resources
+- `APPEND_SYSTEM.md` — appended Pi system guidance
+- `bin/pi-openshell*` — thin adapter, Pi state synchronization, provider, and entrypoint
+- `providers/pi-codex.yaml` — Pi-specific OpenShell credential routing
 
-## Active links
-
-The setup links the subagent extension and agent definitions into `~/.pi/agent/`.
-
-- Edit files here, then run `/reload` in Pi for extensions and other resources.
-- Agent definitions are discovered anew for every `subagent` call.
-- Keep credentials in `~/.pi/agent/auth.json`; never commit them here.
+Keep credentials in `~/.pi/agent/auth.json`; never commit them here. Run `/reload` after changing linked Pi resources. Agent definitions are discovered for each `subagent` call.
 
 ## OpenShell
 
-`Dockerfile` builds an image with these customizations baked in, and
-[`OPEN SHELL.md`](OPEN%20SHELL.md) documents running it in OpenShell without
-mounting this repository or the host Pi profile into the sandbox. The wrapper
-uploads only an allowlisted, sanitized subset of host preferences and explicitly
-uses `/home/pi/.pi/agent` for resource and ephemeral credential discovery.
+Shared OpenShell infrastructure has moved to [`openshell-environments`](https://github.com/enriqTS/openshell-environments). This repository pins version 0.1.0 and retains only Pi-owned behavior.
 
-## Subagents
+See [`OpenShell.md`](OpenShell.md) for dependency installation, explicit image builds, launch/recovery, credentials, and rollback. The launcher transfers only sanitized preferences and current-project sessions; it does not upload the host Pi profile or raw credentials.
 
-The included `subagent` extension originates from Pi's bundled example. `scout` uses `openai-codex/gpt-5.6-luna` for repository investigation. Its model and permitted tools are defined in `agents/scout.md`.
+## Tests
 
-The child Pi processes use your normal Pi authentication and model configuration. Configure a model in each agent's YAML frontmatter before invoking it.
+```bash
+npm test
+```
