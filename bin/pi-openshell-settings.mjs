@@ -104,7 +104,6 @@ export function sanitizeSettings(source) {
     ...sanitizeObject(source, SAFE_SETTINGS),
     extensions: ["/opt/pi-customizations/extensions"],
     skills: ["/opt/pi-customizations/skills"],
-    prompts: ["/opt/pi-customizations/prompts"],
     themes: ["/opt/pi-customizations/themes"],
   };
 }

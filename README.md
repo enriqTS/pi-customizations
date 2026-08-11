@@ -6,15 +6,14 @@ Personal, version-controlled Pi configuration source.
 
 - `extensions/` — TypeScript extensions
 - `agents/` — subagent definitions (linked directly into Pi; Pi packages do not discover these)
-- `prompts/` — prompt templates
 - `skills/` — Agent Skills
 - `themes/` — themes
 
 ## Active links
 
-The setup links the subagent extension, agent definitions, and workflow prompts into `~/.pi/agent/`.
+The setup links the subagent extension and agent definitions into `~/.pi/agent/`.
 
-- Edit files here, then run `/reload` in Pi for extensions, prompts, and other resources.
+- Edit files here, then run `/reload` in Pi for extensions and other resources.
 - Agent definitions are discovered anew for every `subagent` call.
 - Keep credentials in `~/.pi/agent/auth.json`; never commit them here.
 

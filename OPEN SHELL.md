@@ -34,7 +34,7 @@ result into the local Docker image store for OpenShell to use.
 Rebuild after changing this repository and periodically for base-image security
 updates. The image contains:
 
-- extensions, skills, prompts, and themes from this repository
+- extensions, skills, and themes from this repository
 - `APPEND_SYSTEM.md`
 - subagent definitions from `agents/`
 
@@ -264,7 +264,7 @@ tree, but not to the rest of the home directory.
 Before creating the sandbox, `bin/pi-openshell-settings.mjs` builds a temporary
 `settings.json` using an explicit allowlist of non-executable UI, model,
 compaction, retry, terminal, and display preferences. Resource paths are always
-replaced with the reviewed extensions, prompts, skills, and themes baked from
+replaced with the reviewed extensions, skills, and themes baked from
 this repository under `/opt/pi-customizations`. The wrapper uploads this one
 sanitized file separately from the project and `.git` transfers via `/tmp`; the
 entrypoint installs it into the stable agent directory before creating any

@@ -27,7 +27,6 @@ RUN mkdir -p /home/pi/.pi/agent \
   && printf '%s\n' '{' \
     '  "extensions": ["/opt/pi-customizations/extensions"],' \
     '  "skills": ["/opt/pi-customizations/skills"],' \
-    '  "prompts": ["/opt/pi-customizations/prompts"],' \
     '  "themes": ["/opt/pi-customizations/themes"]' \
     '}' > /home/pi/.pi/agent/settings.json \
   && chown -R pi:pi /home/pi/.pi \

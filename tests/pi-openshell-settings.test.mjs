@@ -16,6 +16,7 @@ test("keeps safe preferences and replaces resource paths", () => {
     defaultModel: "gpt-safe",
     compaction: { enabled: false, reserveTokens: 1234, injected: "no" },
     extensions: ["/host/extension.ts"],
+    prompts: ["/host/unwanted-prompts"],
     packages: ["unreviewed-package"],
   });
 
@@ -24,6 +25,7 @@ test("keeps safe preferences and replaces resource paths", () => {
   assert.deepEqual(result.compaction, { enabled: false, reserveTokens: 1234 });
   assert.deepEqual(result.extensions, ["/opt/pi-customizations/extensions"]);
   assert.deepEqual(result.skills, ["/opt/pi-customizations/skills"]);
+  assert.ok(!("prompts" in result));
   assert.ok(!("packages" in result));
 });
 
