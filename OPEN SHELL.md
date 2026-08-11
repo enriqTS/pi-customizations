@@ -251,8 +251,9 @@ the sandbox using the gateway's secret/credential mechanism. Never copy
 OpenShell provider named `codex` before creating the sandbox. It uses the
 built-in OpenShell `codex` profile and passes credential *names* to the CLI;
 the values are supplied only in the short-lived provider-sync process through
-environment lookup. The values are not command-line arguments, sandbox
-environment variables, or files uploaded to the sandbox.
+environment lookup. OpenShell injects them into the sandbox at runtime, where
+the image entrypoint creates the minimal ephemeral `auth.json` that Pi
+expects. The host auth file is never uploaded or mounted.
 
 Log in on the host first, then run the wrapper normally:
 
@@ -276,7 +277,8 @@ export PI_OPENSHELL_PROVIDER=my-codex
 Set `PI_OPENSHELL_PROVIDER=none` to disable automatic synchronization and
 attachment. `PI_CREDENTIALS_PATH` can point to a different Pi auth file. Do
 not set `CODEX_AUTH_*` manually in the sandbox, and do not use `--env` for
-these credentials. The provider still grants the sandbox network access to
+these credentials. Rebuild the image after changing this entrypoint. The
+provider still grants the sandbox network access to
 OpenAI endpoints, so keep the gateway policy restricted and use a trusted
 local gateway.
 

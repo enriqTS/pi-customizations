@@ -17,6 +17,8 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent \
 # Customizations are copied into the image at build time. The host repository is
 # not mounted when the sandbox runs.
 COPY . /opt/pi-customizations
+COPY bin/pi-openshell-entrypoint /usr/local/bin/pi-openshell-entrypoint
+RUN chmod 755 /usr/local/bin/pi-openshell-entrypoint
 
 RUN mkdir -p /home/pi/.pi/agent \
   && cp /opt/pi-customizations/APPEND_SYSTEM.md /home/pi/.pi/agent/APPEND_SYSTEM.md \
@@ -34,4 +36,4 @@ RUN mkdir -p /home/pi/.pi/agent \
 ENV HOME=/home/pi
 WORKDIR /workspace
 USER pi
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["/usr/local/bin/pi-openshell-entrypoint"]
