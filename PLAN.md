@@ -1,5 +1,9 @@
 # Plan
 
-Objective: explain whether VS Code can access the OpenShell-isolated workspace and identify safe workflows.
+Objective: make the documented OpenShell image build runnable from this repository rather than a hard-coded parent directory.
 
-Status: repository inspection complete. Current implementation supports host-side VS Code with snapshot transfer, not live editor access. No code change is required unless a live Remote/VS Code-server workflow is explicitly requested.
+Completed:
+- Updated `OpenShell.md` to build from this repository using `.` as the Docker context.
+- Removed the `~/Projetos` checkout assumption from the image-build instructions.
+
+Status: complete; ready for handoff.

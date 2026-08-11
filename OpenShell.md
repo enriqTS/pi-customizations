@@ -14,17 +14,17 @@ customizations. The customization repository is copied into the image; it is
 
 ## Build the image
 
-Run this from the parent directory so the image receives this repository as
-its build context:
+Run this from the root of this repository. The current directory is the
+image build context, so the command is independent of where the repository is
+checked out:
 
 ```bash
-cd ~/Projetos
+cd /path/to/pi-customizations
 docker buildx build \
   --pull \
   --load \
   -t pi-customized \
-  -f pi-customizations/Dockerfile \
-  pi-customizations
+  .
 ```
 
 `buildx` uses Docker's current BuildKit builder and avoids the legacy-builder
