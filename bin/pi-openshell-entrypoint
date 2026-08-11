@@ -17,7 +17,7 @@ const auth = {
     expires: 0
   }
 };
-fs.writeFileSync(path, JSON.stringify(auth, null, 2) + "\\n", { mode: 0o600 });
+fs.writeFileSync(path, JSON.stringify(auth, null, 2) + "\n", { mode: 0o600 });
 '
   chmod 600 "$HOME/.pi/agent/auth.json"
 fi
