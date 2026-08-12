@@ -3,7 +3,8 @@
   "private": true,
   "description": "Personal Pi extensions, agents, skills, and themes",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "export:assets": "node bin/export-pi-release.mjs assets"
   },
   "pi": {
     "extensions": ["./extensions"],

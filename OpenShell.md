@@ -29,6 +29,28 @@ shared="$HOME/.local/share/openshell-environments/0.1.0"
 
 The launcher uses the full reference `localhost/openshell-environments/pi:0.1.0`. It fails with the build command when that image is absent and never rebuilds on Pi startup. Set `PI_OPENSHELL_IMAGE` only to another full versioned reference. Use `openshell-image cleanup` to remove this version's images.
 
+## Portable release artifacts
+
+Release exports require a clean committed tree and select only reviewed paths; they never archive the checkout or host Pi profile. Create the deterministic asset archive with:
+
+```bash
+bin/export-pi-release.mjs assets --version 0.2.0 --output dist
+```
+
+This writes `pi-assets-0.2.0.tar.gz` and updates `dist/SHA256SUMS`. The archive contains `APPEND_SYSTEM.md`, committed agents/extensions/skills/themes, and the two image helpers, plus a manifest with source revision, API, normalized modes, and member checksums.
+
+After the image has an immutable digest and release compatibility metadata has been generated, create the host package with:
+
+```bash
+bin/export-pi-release.mjs host \
+  --version 0.2.0 \
+  --output dist \
+  --compatibility /path/to/compatibility.json \
+  --asset-archive dist/pi-assets-0.2.0.tar.gz
+```
+
+The exporter validates that the host version/APIs, immutable image reference, and asset checksum match. The host package contains only package-relative launch/synchronization/provider files and compatibility metadata. It does not install, publish, or activate either archive. `SOURCE_DATE_EPOCH` may be set by release CI; otherwise the source commit time is used.
+
 ## Launch
 
 Install the adapter before the ordinary Pi executable on `PATH`:

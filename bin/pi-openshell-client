@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
 ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")/.." && pwd -P)"
+if [[ -d "$ROOT/lib" ]]; then helper_dir="$ROOT/lib"; else helper_dir="$ROOT/bin"; fi
 phase="${1:-}"
 sandbox_name="${2:-}"
 host_workdir="${3:-}"
@@ -22,8 +23,8 @@ host_session_dir="${PI_OPENSHELL_SESSION_DIR:-$host_agent_dir/sessions/$host_ses
 sandbox_session_name="$(encode_session_dir "$sandbox_workdir")"
 sandbox_session_root="/workspace/.pi-openshell-sessions"
 sandbox_session_dir="$sandbox_session_root/$sandbox_session_name"
-settings_helper="$ROOT/bin/pi-openshell-settings.mjs"
-session_helper="$ROOT/bin/pi-openshell-sessions.mjs"
+settings_helper="$helper_dir/pi-openshell-settings.mjs"
+session_helper="$helper_dir/pi-openshell-sessions.mjs"
 host_settings="${PI_OPENSHELL_SETTINGS_PATH:-$host_agent_dir/settings.json}"
 
 case "$phase" in
