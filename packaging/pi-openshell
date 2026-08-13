@@ -16,7 +16,7 @@ try {
   const value = JSON.parse(fs.readFileSync(path, "utf8"));
   if (value.schemaVersion !== 1 || value.hostIntegration?.launcherApi !== 1 || value.hostIntegration?.hookApi !== 1 || value.piAssets?.api !== 1) throw new Error("unsupported compatibility API");
   if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(value.environment?.version ?? "")) throw new Error("invalid environment version");
-  if (!/^ghcr\.io\/enriqTS\/openshell-environments\/pi:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(value.image?.reference ?? "")) throw new Error("invalid release image reference");
+  if (!/^ghcr\.io\/enriqts\/openshell-environments\/pi:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(value.image?.reference ?? "")) throw new Error("invalid release image reference");
   if (!/^sha256:[0-9a-f]{64}$/.test(value.image?.digest ?? "")) throw new Error("invalid release image digest");
   console.log(value.environment.version);
   console.log(value.image.reference);

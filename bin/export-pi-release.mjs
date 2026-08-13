@@ -103,7 +103,7 @@ function validateCompatibility(value, version, assetChecksum, assetManifest) {
   exactKeys(value.hostIntegration, ["version", "launcherApi", "hookApi"], "compatibility.hostIntegration");
   exactKeys(value.piAssets, ["version", "api", "sourceRevision", "sha256"], "compatibility.piAssets");
   if (!VERSION.test(value.environment?.version ?? "") || !REVISION.test(value.environment?.revision ?? "")) fail("compatibility environment is invalid");
-  const imageVersion = value.image?.reference?.match(/^ghcr\.io\/enriqTS\/openshell-environments\/pi:([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)$/)?.[1];
+  const imageVersion = value.image?.reference?.match(/^ghcr\.io\/enriqts\/openshell-environments\/pi:([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)$/)?.[1];
   if (!imageVersion || imageVersion !== value.environment.version || !/^sha256:[0-9a-f]{64}$/.test(value.image?.digest ?? "")) fail("compatibility image must be versioned and digest-pinned");
   if (!Array.isArray(value.image.platforms) || value.image.platforms.length === 0 || value.image.platforms.some((item) => !["linux/amd64", "linux/arm64"].includes(item)) || new Set(value.image.platforms).size !== value.image.platforms.length) fail("compatibility image platforms are invalid");
   if (value.hostIntegration?.version !== version || value.hostIntegration?.launcherApi !== 1 || value.hostIntegration?.hookApi !== 1) fail("compatibility host integration is incompatible");

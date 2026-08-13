@@ -73,7 +73,7 @@ async function compatibility(assetArchive, hostVersion = version) {
     schemaVersion: 1,
     environment: { version: "9.8.7", revision: "a".repeat(40) },
     image: {
-      reference: "ghcr.io/enriqTS/openshell-environments/pi:9.8.7",
+      reference: "ghcr.io/enriqts/openshell-environments/pi:9.8.7",
       digest: `sha256:${"b".repeat(64)}`,
       platforms: ["linux/amd64"],
     },
@@ -155,7 +155,7 @@ test("host export contains only package-relative integration and valid metadata"
     env: { ...process.env, PI_OPENSHELL_ENVIRONMENTS_DIR: dependency, PI_OPENSHELL_PROVIDER: "none", FAKE_LOG: log },
   });
   const args = await readFile(log, "utf8");
-  assert.match(args, new RegExp(`ghcr.io/enriqTS/openshell-environments/pi:9\\.8\\.7@sha256:${"b".repeat(64)}`));
+  assert.match(args, new RegExp(`ghcr.io/enriqts/openshell-environments/pi:9\\.8\\.7@sha256:${"b".repeat(64)}`));
   assert.match(args, new RegExp(join(extracted, "bin/pi-openshell-hook").replaceAll("/", "\\/")));
 });
 
