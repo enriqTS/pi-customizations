@@ -1,0 +1,51 @@
+name: Release Pi assets
+
+on:
+  push:
+    tags:
+      - "pi-assets-v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#pi-assets-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            printf 'release-pi-assets: tag must be pi-assets-v<semver>: %s\n' "$tag" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Export sanitized Pi asset archive
+        run: node bin/export-pi-release.mjs assets --version "${{ steps.version.outputs.version }}" --output dist
+
+      - name: Attest archive provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/pi-assets-*.tar.gz
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/pi-assets-*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true
