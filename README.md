@@ -11,8 +11,10 @@ Personal, version-controlled Pi configuration and Pi-owned OpenShell integration
 - `APPEND_SYSTEM.md` — appended Pi system guidance
 - `bin/pi-openshell*` — thin adapter, Pi state synchronization, provider, and entrypoint
 - `bin/export-pi-release.mjs` — deterministic allowlist-based release artifact exporter
+- `bin/install-pi-openshell` — self-contained installer/manager for the published host package
 - `packaging/pi-openshell` — package-relative portable launcher source
 - `providers/pi-codex.yaml` — Pi-specific OpenShell credential routing
+- `release/` — pin files (`openshell-environments.version`, `pi-assets.version`) read by `release-pi-openshell.yml` when assembling `compatibility.json`
 
 Keep credentials in `~/.pi/agent/auth.json`; never commit them here. Run `/reload` after changing linked Pi resources. Agent definitions are discovered for each `subagent` call.
 

@@ -2,6 +2,20 @@
 
 Shared image, policy, gateway, workspace/Git lifecycle, and recovery behavior live in [`openshell-environments`](https://github.com/enriqTS/openshell-environments). This repository owns Pi resources and the thin client integration.
 
+## Portable installation (recommended)
+
+For normal use, install the published `pi-openshell` host package instead of checking out either repository:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/enriqTS/pi-customizations/main/bin/install-pi-openshell | bash -s -- install <version>
+```
+
+`bin/install-pi-openshell` downloads and checksum-verifies a `pi-openshell-v<version>` GitHub Release, validates its manifest and `compatibility.json` inline (no dependency on a local checkout), fetches the compatible `openshell-environments` release it names, installs atomically under `${XDG_DATA_HOME:-$HOME/.local/share}/pi-openshell/<version>/`, and symlinks `${XDG_BIN_HOME:-$HOME/.local/bin}/pi`. Manage installed versions with `install-pi-openshell {upgrade|downgrade|uninstall|list}`. See `openshell-environments`' [`docs/pi-release-contracts.md`](https://github.com/enriqTS/openshell-environments/blob/main/docs/pi-release-contracts.md) for the full contract.
+
+Releases are cut by `.github/workflows/release-pi-openshell.yml` on a `pi-openshell-v<version>` tag, which assembles `compatibility.json` from the `release/openshell-environments.version` and `release/pi-assets.version` pin files (resolving the actual published image digest and asset checksum, never hand-transcribed) and publishes via `bin/export-pi-release.mjs host`.
+
+The rest of this document covers the source-based rollback path (`bin/pi-openshell`, still pinned at `openshell-environments` 0.1.0), useful for local development of either repository.
+
 ## Compatibility and installation
 
 This revision requires `openshell-environments` 0.1.0, launcher API 1. Install the tagged dependency:
