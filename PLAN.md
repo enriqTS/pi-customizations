@@ -27,4 +27,6 @@ This repository now implements Phase 5: `.github/workflows/release-pi-openshell.
 
 `pi-openshell-v0.1.0` is published: https://github.com/enriqTS/pi-customizations/releases/tag/pi-openshell-v0.1.0. The first real run failed — the workflow wrote `assets/`/`compatibility.json` into the checkout root, which aren't gitignored, so the exporter's clean-tree check correctly rejected it; fixed by staging under the already-ignored `dist/` and reproduced against a fresh clone at the failed tag before re-pushing. `bin/install-pi-openshell` was run for real against the live release (in an isolated sandbox, not this machine's real `pi`), confirming the whole chain end to end.
 
-The earlier OpenShell migration remains the rollback baseline. Next action: Phase 6 in `openshell-environments` (clean-machine acceptance on a second computer, and switching a real machine's `pi` over to the published install).
+Phase 6 (`openshell-environments`' `bin/clean-machine-acceptance`) is complete: 23/23 checks pass against this repository's published `pi-openshell-v0.1.0` release inside a fresh container with no checkout of either repository, including a live Pi conversation through the real `pi-codex` provider and a live `terraform apply` block via `extensions/terraform-guard`.
+
+The earlier OpenShell migration remains the rollback baseline. Next action: switching a real machine's `pi` over to the published install (asked separately; not done as a side effect of acceptance testing).
