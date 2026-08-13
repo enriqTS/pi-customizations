@@ -58,19 +58,22 @@ jobs:
       - name: Download and verify pinned pi-assets release
         id: assets
         run: |
+          # dist/ is gitignored: staging downloads and generated files here
+          # (rather than the repo root) keeps the checkout clean, which the
+          # exporter requires.
           pi_assets_version="$(cat release/pi-assets.version)"
           base_url="https://github.com/${PI_CUSTOMIZATIONS_REPO}/releases/download/pi-assets-v${pi_assets_version}"
-          mkdir -p assets
-          curl -fsSL -o "assets/pi-assets-${pi_assets_version}.tar.gz" "$base_url/pi-assets-${pi_assets_version}.tar.gz"
-          curl -fsSL -o assets/SHA256SUMS "$base_url/SHA256SUMS"
-          (cd assets && sha256sum -c --ignore-missing SHA256SUMS)
-          tar -xOzf "assets/pi-assets-${pi_assets_version}.tar.gz" manifest.json > assets/manifest.json
-          checksum="$(sha256sum "assets/pi-assets-${pi_assets_version}.tar.gz" | awk '{print $1}')"
-          printf 'archive=%s\n' "assets/pi-assets-${pi_assets_version}.tar.gz" >> "$GITHUB_OUTPUT"
+          mkdir -p dist/assets
+          curl -fsSL -o "dist/assets/pi-assets-${pi_assets_version}.tar.gz" "$base_url/pi-assets-${pi_assets_version}.tar.gz"
+          curl -fsSL -o dist/assets/SHA256SUMS "$base_url/SHA256SUMS"
+          (cd dist/assets && sha256sum -c --ignore-missing SHA256SUMS)
+          tar -xOzf "dist/assets/pi-assets-${pi_assets_version}.tar.gz" manifest.json > dist/assets/manifest.json
+          checksum="$(sha256sum "dist/assets/pi-assets-${pi_assets_version}.tar.gz" | awk '{print $1}')"
+          printf 'archive=%s\n' "dist/assets/pi-assets-${pi_assets_version}.tar.gz" >> "$GITHUB_OUTPUT"
           printf 'checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
           node -e '
             const fs = require("fs");
-            const m = JSON.parse(fs.readFileSync("assets/manifest.json", "utf8"));
+            const m = JSON.parse(fs.readFileSync("dist/assets/manifest.json", "utf8"));
             process.stdout.write(`version=${m.version}\napi=${m.piAssetsApi}\nrevision=${m.source.revision}\n`);
           ' >> "$GITHUB_OUTPUT"
 
@@ -95,11 +98,11 @@ jobs:
               hostIntegration: { version: process.env.HOST_VERSION, launcherApi: 1, hookApi: 1 },
               piAssets: { version: process.env.ASSETS_VERSION, api: Number(process.env.ASSETS_API), sourceRevision: process.env.ASSETS_REVISION, sha256: process.env.ASSETS_CHECKSUM },
             };
-            fs.writeFileSync("compatibility.json", `${JSON.stringify(value, null, 2)}\n`);
+            fs.writeFileSync("dist/compatibility.json", `${JSON.stringify(value, null, 2)}\n`);
           '
 
       - name: Export host integration archive
-        run: node bin/export-pi-release.mjs host --version "${{ steps.version.outputs.version }}" --output dist --compatibility compatibility.json --asset-archive "${{ steps.assets.outputs.archive }}"
+        run: node bin/export-pi-release.mjs host --version "${{ steps.version.outputs.version }}" --output dist --compatibility dist/compatibility.json --asset-archive "${{ steps.assets.outputs.archive }}"
 
       - name: Attest archive provenance
         uses: actions/attest-build-provenance@v1
