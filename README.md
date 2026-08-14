@@ -1,28 +1,26 @@
 # Pi customizations
 
-Personal, version-controlled Pi configuration and Pi-owned OpenShell integration.
+Version-controlled, generic Pi resources.
 
-## Layout
+## Contents
 
-- `extensions/` — TypeScript extensions, including the Terraform apply guard
-- `agents/` — subagent definitions
-- `prompts/` — reusable prompts
-- `skills/` and `themes/` — Pi resources
 - `APPEND_SYSTEM.md` — appended Pi system guidance
-- `bin/pi-openshell*` — thin adapter, Pi state synchronization, provider, and entrypoint
-- `bin/export-pi-release.mjs` — deterministic allowlist-based release artifact exporter
-- `bin/install-pi-openshell` — self-contained installer/manager for the published host package
-- `packaging/pi-openshell` — package-relative portable launcher source
-- `providers/pi-codex.yaml` — Pi-specific OpenShell credential routing
-- `release/` — pin files (`openshell-environments.version`, `pi-assets.version`) read by `release-pi-openshell.yml` when assembling `compatibility.json`
+- `agents/` — subagent definitions
+- `extensions/` — TypeScript extensions, including the Terraform apply guard
+- `skills/` and `themes/` — Pi resources
+- `bin/export-pi-release.mjs` — deterministic generic asset exporter
 
 Keep credentials in `~/.pi/agent/auth.json`; never commit them here. Run `/reload` after changing linked Pi resources. Agent definitions are discovered for each `subagent` call.
 
-## OpenShell
+## Generic asset releases
 
-Shared OpenShell infrastructure has moved to [`openshell-environments`](https://github.com/enriqTS/openshell-environments). This repository pins version 0.1.0 and retains only Pi-owned behavior.
+Tags named `pi-assets-v<semver>` publish `pi-assets-<semver>.tar.gz`, `SHA256SUMS`, and a build-provenance attestation. The archive is schema/API version 1 and contains only `manifest.json`, `APPEND_SYSTEM.md`, and committed files under `agents/`, `extensions/`, `skills/`, and `themes/`. Every manifest file has `target: "agent"`, normalized metadata, and a SHA-256 checksum.
 
-See [`OpenShell.md`](OpenShell.md) for dependency installation, explicit image builds, launch/recovery, credentials, release exports, and rollback. The launcher transfers only sanitized preferences and current-project sessions; it does not upload the host Pi profile or raw credentials.
+Create an archive from a clean checkout:
+
+```bash
+node bin/export-pi-release.mjs --version 0.2.0 --output dist
+```
 
 ## Tests
 

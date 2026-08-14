@@ -35,7 +35,7 @@ jobs:
         run: npm test
 
       - name: Export sanitized Pi asset archive
-        run: node bin/export-pi-release.mjs assets --version "${{ steps.version.outputs.version }}" --output dist
+        run: node bin/export-pi-release.mjs --version "${{ steps.version.outputs.version }}" --output dist
 
       - name: Attest archive provenance
         uses: actions/attest-build-provenance@v1

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, mkdtemp, mkdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,22 +20,7 @@ async function run(command, args, options = {}) {
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "pi-export-source-"));
-  const copied = [
-    "APPEND_SYSTEM.md",
-    "agents/planner.md",
-    "extensions/subagent/index.ts",
-    "skills/.gitkeep",
-    "themes/.gitkeep",
-    "bin/pi-openshell-entrypoint",
-    "bin/patch-pi-codex",
-    "bin/pi-openshell-client",
-    "bin/pi-openshell-settings.mjs",
-    "bin/pi-openshell-sessions.mjs",
-    "bin/pi-openshell-provider",
-    "providers/pi-codex.yaml",
-    "packaging/pi-openshell",
-  ];
-  for (const path of copied) {
+  for (const path of ["APPEND_SYSTEM.md", "agents/planner.md", "extensions/subagent/index.ts", "skills/.gitkeep", "themes/.gitkeep"]) {
     await mkdir(dirname(join(directory, path)), { recursive: true });
     await cp(join(root, path), join(directory, path));
   }
@@ -48,7 +33,7 @@ async function fixture() {
 }
 
 async function exportAssets(source, output) {
-  await run(exporter, ["assets", "--source", source, "--version", version, "--output", output], { env: fixedEnv });
+  await run(exporter, ["--source", source, "--version", version, "--output", output], { env: fixedEnv });
   return join(output, `pi-assets-${version}.tar.gz`);
 }
 
@@ -66,24 +51,6 @@ function hash(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-async function compatibility(assetArchive, hostVersion = version) {
-  const path = join(dirname(assetArchive), "compatibility.json");
-  const assetManifest = JSON.parse((await run("tar", ["-xOzf", assetArchive, "manifest.json"])).stdout);
-  const value = {
-    schemaVersion: 1,
-    environment: { version: "9.8.7", revision: "a".repeat(40) },
-    image: {
-      reference: "ghcr.io/enriqts/openshell-environments/pi:9.8.7",
-      digest: `sha256:${"b".repeat(64)}`,
-      platforms: ["linux/amd64"],
-    },
-    hostIntegration: { version: hostVersion, launcherApi: 1, hookApi: 1 },
-    piAssets: { version: assetManifest.version, api: assetManifest.piAssetsApi, sourceRevision: assetManifest.source.revision, sha256: hash(await readFile(assetArchive)) },
-  };
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
-  return path;
-}
-
 test("asset export is deterministic, normalized, and exactly allowlisted", async () => {
   const source = await fixture();
   const firstOutput = await mkdtemp(join(tmpdir(), "pi-assets-first-"));
@@ -94,13 +61,10 @@ test("asset export is deterministic, normalized, and exactly allowlisted", async
   assert.deepEqual(await readFile(first), await readFile(second));
 
   const list = await members(first);
-  assert.deepEqual(list, [...list].sort((a, b) => Buffer.from(a).compare(Buffer.from(b))));
   assert.deepEqual(list, [
     "APPEND_SYSTEM.md",
     "agents/planner.md",
     "extensions/subagent/index.ts",
-    "image/patch-pi-codex",
-    "image/pi-openshell-entrypoint",
     "manifest.json",
     "skills/.gitkeep",
     "themes/.gitkeep",
@@ -110,56 +74,15 @@ test("asset export is deterministic, normalized, and exactly allowlisted", async
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.piAssetsApi, 1);
   assert.match(manifest.source.revision, /^[0-9a-f]{40}$/);
-  for (const file of manifest.files) assert.equal(file.sha256, hash(await readFile(join(extracted, file.path))));
-  const checksumLines = await readFile(join(firstOutput, "SHA256SUMS"), "utf8");
-  assert.equal(checksumLines, `${hash(await readFile(first))}  pi-assets-${version}.tar.gz\n`);
-  assert.doesNotMatch(list.join("\n"), /auth|settings|sessions|(^|\/)\.git(\/|$)|pi-openshell-provider/);
+  for (const file of manifest.files) {
+    assert.equal(file.target, "agent");
+    assert.equal(file.sha256, hash(await readFile(join(extracted, file.path))));
+  }
+  assert.equal(await readFile(join(firstOutput, "SHA256SUMS"), "utf8"), `${hash(await readFile(first))}  pi-assets-${version}.tar.gz\n`);
+  assert.doesNotMatch(list.join("\n"), /(^|\/)(bin|image|providers|release|packaging|auth|settings|sessions)(\/|$)/i);
 });
 
-test("host export contains only package-relative integration and valid metadata", async () => {
-  const source = await fixture();
-  const output = await mkdtemp(join(tmpdir(), "pi-host-export-"));
-  const assets = await exportAssets(source, output);
-  const metadata = await compatibility(assets);
-  await run(exporter, ["host", "--source", source, "--version", version, "--output", output, "--compatibility", metadata, "--asset-archive", assets], { env: fixedEnv });
-  const archive = join(output, `pi-openshell-${version}.tar.gz`);
-  assert.deepEqual(await members(archive), [
-    "bin/pi",
-    "bin/pi-openshell",
-    "bin/pi-openshell-hook",
-    "compatibility.json",
-    "lib/pi-openshell-provider",
-    "lib/pi-openshell-sessions.mjs",
-    "lib/pi-openshell-settings.mjs",
-    "manifest.json",
-    "providers/pi-codex.yaml",
-  ]);
-  const extracted = await extract(archive);
-  const launcher = await readFile(join(extracted, "bin/pi-openshell"), "utf8");
-  const hook = await readFile(join(extracted, "bin/pi-openshell-hook"), "utf8");
-  assert.doesNotMatch(`${launcher}\n${hook}`, /Projetos|\.\.\/openshell-environments|CUSTOMIZATIONS_DIR/);
-  assert.match(launcher, /PACKAGE_DIR/);
-  assert.match(hook, /ROOT\/lib|\$ROOT\/lib/);
-
-  const dependency = join(output, "openshell-environments");
-  await mkdir(join(dependency, "bin"), { recursive: true });
-  await mkdir(join(dependency, "clients/pi"), { recursive: true });
-  await writeFile(join(dependency, "VERSION"), "9.8.7\n");
-  await writeFile(join(dependency, "API_VERSION"), "1\n");
-  await writeFile(join(dependency, "clients/pi/policy.yaml"), "version: 1\n");
-  const log = join(output, "launcher.log");
-  await writeFile(join(dependency, "bin/openshell-workspace"), `#!/usr/bin/env bash\nprintf '%s\\n' "$@" >"$FAKE_LOG"\n`);
-  await chmod(join(dependency, "bin/openshell-workspace"), 0o755);
-  await run(join(extracted, "bin/pi"), ["--recover-download", "pi-test"], {
-    cwd: output,
-    env: { ...process.env, PI_OPENSHELL_ENVIRONMENTS_DIR: dependency, PI_OPENSHELL_PROVIDER: "none", FAKE_LOG: log },
-  });
-  const args = await readFile(log, "utf8");
-  assert.match(args, new RegExp(`ghcr.io/enriqts/openshell-environments/pi:9\\.8\\.7@sha256:${"b".repeat(64)}`));
-  assert.match(args, new RegExp(join(extracted, "bin/pi-openshell-hook").replaceAll("/", "\\/")));
-});
-
-test("export fails closed for dirty, symlinked, forbidden, and mismatched inputs", async () => {
+test("export fails closed for dirty, symlinked, forbidden, and invalid commands", async () => {
   const dirty = await fixture();
   await writeFile(join(dirty, "untracked.txt"), "not reviewed\n");
   const output = await mkdtemp(join(tmpdir(), "pi-export-invalid-"));
@@ -177,8 +100,5 @@ test("export fails closed for dirty, symlinked, forbidden, and mismatched inputs
   await run("git", ["-C", symlink, "commit", "-qm", "symlink"], { env: fixedEnv });
   await assert.rejects(exportAssets(symlink, output), /regular non-symlink/);
 
-  const clean = await fixture();
-  const assets = await exportAssets(clean, output);
-  const metadata = await compatibility(assets, "7.7.7");
-  await assert.rejects(run(exporter, ["host", "--source", clean, "--version", version, "--output", output, "--compatibility", metadata, "--asset-archive", assets], { env: fixedEnv }), /host integration is incompatible/);
+  await assert.rejects(run(exporter, ["assets", "--version", version, "--output", output], { env: fixedEnv }), /usage: export-pi-release/);
 });
